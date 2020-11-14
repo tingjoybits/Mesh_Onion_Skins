@@ -2,7 +2,11 @@
 
 **Mesh Onion Skins**  is a Blender add-on that helps to create and analyze object or character animation. Onion skinning, in computer graphics, is a technique used in creating animations to see several frames at once. This way, the animator can make decisions on how to create or change a frame based on the previous frame in the sequence.
 
-**How does it work?** Basically, this add-on makes duplicate objects of the corresponded frame and applies to them several properties at the specified frame range. All duplicated objects (onion skins) are stored in the newly created collection and can be found in the Outliner.
+**How does it work?** Mesh Onion Skins add-on has 'GPU' and 'Mesh' draw modes, that you can choose from.
+
+- **'GPU'** mode is designed to be fast in term of viewport performance and less in time creation, but it is not present as a mesh data, therefore less possibilities in their data manipulation.
+
+- **'Mesh'** mode, basically, makes duplicate objects of the corresponded frame and applies to them several properties at the specified frame range. All duplicated objects (onion skins) are stored in the newly created collection and can be found in the Outliner. Stored collected data can be rendered with EEVEE or Cycles, or can be served for other purposes.
 
 ![bball_gif|320x180, 100%](images/bball_gif.gif) 
 
