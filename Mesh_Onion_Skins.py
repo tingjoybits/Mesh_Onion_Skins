@@ -3590,7 +3590,7 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
 
     draw_gpu_toggle: BoolProperty(
         name="Draw Frames",
-        description="Show onion skin frames in the 3D Viewport. 'Esc' to stop drawing",
+        description="Show onion skin frames in the 3D Viewport",
         default=False, update=update_draw_gpu_toggle)
 
 
