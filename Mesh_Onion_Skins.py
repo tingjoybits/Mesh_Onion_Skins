@@ -665,6 +665,8 @@ def check_draw_gpu_toggle(scene):
                 bpy.context.active_object.type == 'ARMATURE')) and (
                 mode == 'OBJECT' or mode == 'POSE'):
             Active_Object = bpy.context.active_object
+        else:
+            return None
     except (IndexError, AttributeError) as e:
         return None
     if Active_Object.is_onionsk or Active_Object.is_os_marker:
