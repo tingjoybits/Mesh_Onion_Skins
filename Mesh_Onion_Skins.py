@@ -30,7 +30,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 0, 5),
+    'version': (1, 0, 6),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -416,7 +416,7 @@ def update_tmarker(self, context):
     if sc.onionsk_tmarker is False:
         remove_time_markers()
         return None
-    if sc.os_draw_technic == 'GPU':
+    if sc.os_draw_mode == 'GPU':
         objp = checkout_parent(context.active_object)
         if not GPU_FRAMES.get(objp.name):
             return None
@@ -674,7 +674,7 @@ def check_draw_gpu_toggle(scene):
             sc.onionsk_tmarker = False
             sc.onionsk_tmarker = True
         remove_handlers(bpy.context)
-        if DRAW_TOGGLE and sc.os_draw_technic == 'GPU':
+        if DRAW_TOGGLE and sc.os_draw_mode == 'GPU':
             sc.draw_gpu_toggle = True
 
 
@@ -721,7 +721,7 @@ class OS_PT_UI_Panel(Panel):
         if not actions:
             return None
         row = layout.row(align=True)
-        row.prop(sc, 'os_draw_technic', text='')
+        row.prop(sc, 'os_draw_mode', text='')
         row = layout.row(align=True)
         row.scale_y = 1.2
         if sc.onionsk_mpath:
@@ -730,14 +730,14 @@ class OS_PT_UI_Panel(Panel):
             row.operator('mos_op.clear_motion_path', text='', icon='X')
         if not onionsk:
             row.operator('mos_op.make_skins', text='Create ', icon='ONIONSKIN_ON')
-            if sc.os_draw_technic == 'MESH':
+            if sc.os_draw_mode == 'MESH':
                 row.prop(params, 'display_progress', text='', icon='TEMP')
             if (sc.onionsk_Markers_count > 0 and obj.is_os_marker) and\
-                    sc.os_draw_technic == 'GPU':
+                    sc.os_draw_mode == 'GPU':
                 row.prop(sc, 'draw_gpu_toggle', text='', icon='RENDER_ANIMATION')
         else:
             row.operator('mos_op.make_skins', text='Update ', icon='ONIONSKIN_ON')
-            if sc.os_draw_technic == 'GPU':
+            if sc.os_draw_mode == 'GPU':
                 row.prop(sc, 'draw_gpu_toggle', text='', icon='RENDER_ANIMATION')
             else:
                 row.prop(params, 'display_progress', text='', icon='TEMP')
@@ -855,13 +855,13 @@ class OS_PT_Options_Panel(Panel):
         col = box.column(align=True)
         row = box.row()
         col.label(text="Onion Skins Settings:")
-        if sc.os_draw_technic == 'MESH':
+        if sc.os_draw_mode == 'MESH':
             row.prop(sc, "show_in_render")
             row.prop(sc, "os_selectable")
             row = box.row()
             row.prop(sc, "onionsk_colors", text="Colors")
             row.prop(sc, "onionsk_wire", text="Wireframe")
-        elif sc.os_draw_technic == 'GPU':
+        elif sc.os_draw_mode == 'GPU':
             row.prop(sc, "gpu_flat_colors")
             row.prop(sc, "gpu_colors_in_front")
             row = box.row()
@@ -1082,7 +1082,7 @@ class OS_PT_View_Range_Panel(Panel):
         sc = bpy.context.scene.onion_skins_scene_props
         layout = self.layout
         row = layout.row(align=True)
-        if sc.os_draw_technic == 'GPU' and sc.onionsk_method == 'KEYFRAME':
+        if sc.os_draw_mode == 'GPU' and sc.onionsk_method == 'KEYFRAME':
             row.prop(sc, 'view_range_frame_type', expand=True)
         row = layout.row(align=True)
         row.prop(sc, 'view_before')
@@ -2068,7 +2068,7 @@ class GPU_OT_Draw_Skins(bpy.types.Operator):
     def invoke(self, context, event):
         global Draw_Handler
         global Draw_Timer
-        if self.sc.os_draw_technic != 'GPU':
+        if self.sc.os_draw_mode != 'GPU':
             return {'CANCELLED'}
         Draw_Timer = context.window_manager.event_timer_add(0.1, window=context.window)
         Draw_Handler = bpy.types.SpaceView3D.draw_handler_add(self.draw_gpu_frames, (context,), 'WINDOW', 'POST_VIEW')
@@ -2105,7 +2105,7 @@ class GPU_OT_Draw_Skins(bpy.types.Operator):
         else:
             before_frames = sc.view_before - 1
             after_frames = sc.view_after - 1
-            if sc.view_range_frame_type == 'KEYFRAME':
+            if sc.onionsk_method == 'KEYFRAME' and sc.view_range_frame_type == 'KEYFRAME':
                 if item_frame < curframe:
                     bf = [f for f in self.frames_count if f < curframe]
                     bf.reverse()
@@ -2173,14 +2173,18 @@ class GPU_OT_Draw_Skins(bpy.types.Operator):
 
             if item_frame < curframe:
                 color = (colorB[0], colorB[1], colorB[2], colorB[3] - fade)
-                if sc.view_range_frame_type == 'KEYFRAME' and sc.hide_os_before:
+                if sc.view_range and sc.onionsk_method == 'KEYFRAME' and\
+                        sc.view_range_frame_type == 'KEYFRAME' and\
+                        sc.hide_os_before:
                     if item_frame in self.before:
                         draw = True
                 elif frame_diff <= sc.view_before and sc.hide_os_before:
                     draw = True
             else:
                 color = (colorA[0], colorA[1], colorA[2], colorA[3] - fade)
-                if sc.view_range_frame_type == 'KEYFRAME' and sc.hide_os_after:
+                if sc.view_range and sc.onionsk_method == 'KEYFRAME' and\
+                        sc.view_range_frame_type == 'KEYFRAME' and\
+                        sc.hide_os_after:
                     if item_frame in self.after:
                         draw = True
                 elif frame_diff <= sc.view_after and sc.hide_os_after:
@@ -2460,6 +2464,13 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
         params = bpy.context.window_manager.onionSkinsParams
         prefs = bpy.context.preferences.addons[__name__].preferences
         obj = context.selected_objects[0]
+        # Check object is a parent or a child
+        objp = checkout_parent(obj)
+        if (objp.override_library or obj.override_library) and sc.os_draw_mode == 'MESH':
+            msg = "'Mesh' mode does not work with overrided libraries, use 'GPU' mode instead."
+            self.report({'ERROR'}, msg)
+            return {'FINISHED'}
+
         global CREATING
         CREATING = True
         #Switch in Front property for display mesh in viewport properly.
@@ -2476,8 +2487,6 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
                 tmarkers.remove(tmarkers.get('os'))
 
         bpy.data.objects.update()
-        # Check object is a parent or a child
-        objp = checkout_parent(obj)
 
         remove_skins(obj)
         remove_handlers(context)
@@ -2491,7 +2500,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
         #Store current mode to return to it after complete operations
         mode = bpy.context.mode
         bpy.ops.object.mode_set(mode='OBJECT')
-        if sc.os_draw_technic == 'MESH':
+        if sc.os_draw_mode == 'MESH':
             # Initially Create Collectiont for skins to be stored in
             main_empty = init_os_collection()
             # Create an EMPTY using onionsk + Parent object's name
@@ -2529,7 +2538,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
 
         self.th = threading.Thread(target=long_task, args=(self, context))
         OS_OT_CreateUpdate_Skins.set_frames(self, context)
-        if sc.os_draw_technic == 'GPU':
+        if sc.os_draw_mode == 'GPU':
             GPU_FRAMES[objp.name] = {}
             params.display_progress = False
 
@@ -2546,6 +2555,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
                 return {'FINISHED'}
             for Frame in self.Frames:
                 OS_OT_CreateUpdate_Skins.make_frame(self, Frame)
+            print("Onion Skin: Done")
 
             OS_OT_CreateUpdate_Skins.finishing(self, context)
             return {'FINISHED'}
@@ -2588,9 +2598,9 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
         if sc.onionsk_tmarker is True:
             tmarkers = bpy.context.scene.timeline_markers
             tmarkers.new("os", frame=Frame)
-        if sc.os_draw_technic == 'MESH':
+        if sc.os_draw_mode == 'MESH':
             count = make_onionSkin_frame(self, self.objp, self.empty, self.curframe, Frame)
-        if sc.os_draw_technic == 'GPU':
+        if sc.os_draw_mode == 'GPU':
             count = make_gpu_frame(self.objp, self.curframe, Frame)
         self.Skins_count += count
 
@@ -2650,7 +2660,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
         if sc.view_range:
             view_range_frames(context.scene)
 
-        if sc.os_draw_technic == 'GPU' and not sc.draw_gpu_toggle:
+        if sc.os_draw_mode == 'GPU' and not sc.draw_gpu_toggle:
             sc.draw_gpu_toggle = True
 
         if not params.display_progress and self.empty:
@@ -2743,13 +2753,17 @@ class OS_OT_Add_Marker(bpy.types.Operator):
         obj = bpy.context.selected_objects[0]
         # Check to see if object is a parent or a child
         objp = checkout_parent(obj)
+        if (objp.override_library or obj.override_library) and sc.os_draw_mode == 'MESH':
+            msg = "'Mesh' mode does not work with overrided libraries, use 'GPU' mode instead."
+            self.report({'ERROR'}, msg)
+            return {'FINISHED'}
         tmarkers = bpy.context.scene.timeline_markers
         curframe = bpy.context.scene.frame_current
         # start at current frame
         if sc.onionsk_tmarker is True:
             tmarkers.new("osm", frame=curframe)
 
-        if sc.os_draw_technic == 'GPU':
+        if sc.os_draw_mode == 'GPU':
             global GPU_MARKERS
             if not GPU_MARKERS.get(objp.name):
                 GPU_MARKERS[objp.name] = {}
@@ -2772,7 +2786,7 @@ class OS_OT_Add_Marker(bpy.types.Operator):
         mode = bpy.context.mode
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        if sc.os_draw_technic == 'MESH':
+        if sc.os_draw_mode == 'MESH':
             # Initially Create Collectiont for skins to be stored in
             init_os_collection()
             # Setup an 'empty' to use as a parent for Markers
@@ -2786,9 +2800,9 @@ class OS_OT_Add_Marker(bpy.types.Operator):
         obj.select_set(False)
 
         # CREATE MARKER SKIN
-        if mark_skins_empty and sc.os_draw_technic == 'MESH':
+        if mark_skins_empty and sc.os_draw_mode == 'MESH':
             count = make_onionSkin_frame(self, objp, mark_skins_empty, curframe, curframe, 'MARKER')
-        elif sc.os_draw_technic == 'GPU':
+        elif sc.os_draw_mode == 'GPU':
             count = make_onionSkin_frame(self, objp, mark_skins_empty, curframe, curframe, 'MARKER')
         # Update Marker Skins count
         if count:
@@ -3458,7 +3472,7 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
         description='Frames to skip (1 = draw every frame)',
         min=1, soft_min=1, max=100, soft_max=100, default=1)
 
-    os_draw_technic: EnumProperty(
+    os_draw_mode: EnumProperty(
         name="Draw Mode", items=[
             ('GPU', 'GPU',
              ''),
@@ -3599,7 +3613,7 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
 def get_os_marker_frame_nums(self, context):
     sc = bpy.context.scene.onion_skins_scene_props
     objp = checkout_parent(context.active_object)
-    if sc.os_draw_technic == 'GPU':
+    if sc.os_draw_mode == 'GPU':
         if not GPU_MARKERS.get(objp.name):
             return []
         frame_nums = [float(s.split('|@|')[-1]) for s in GPU_MARKERS[objp.name]]
@@ -3631,7 +3645,7 @@ def delete_mos_marker(self, context):
     obj = context.active_object
     objp = checkout_parent(obj)
     global GPU_MARKERS
-    if sc.os_draw_technic == 'MESH':
+    if sc.os_draw_mode == 'MESH':
         treeM = get_empty_objs_tree(False, 'MARKER')
         markers = treeM.children
         if not treeM:
@@ -3668,7 +3682,7 @@ def delete_mos_marker(self, context):
     SKIP_DELETE = False
 
     if not markers:
-        if sc.os_draw_technic == 'MESH':
+        if sc.os_draw_mode == 'MESH':
             bpy.data.objects.remove(treeM, do_unlink=True)
         obj.is_os_marker = 0
         objp.is_os_marker = 0
@@ -3938,7 +3952,7 @@ def view_range_frames(scene):
     sc = bpy.context.scene.onion_skins_scene_props
     if not sc.view_range:
         return None
-    if sc.os_draw_technic == 'GPU':
+    if sc.os_draw_mode == 'GPU':
         return None
     tree = get_empty_objs_tree()
     if not tree:
@@ -3986,7 +4000,7 @@ def m_os_pre_render_handler(scene):
     RENDERING = True
     if not scene.onion_skins_scene_props.view_range:
         return None
-    if not scene.render.use_lock_interface and sc.os_draw_technic == 'MESH':
+    if not scene.render.use_lock_interface and sc.os_draw_mode == 'MESH':
         scene.render.use_lock_interface = True
     view_range_frames(scene)
 
