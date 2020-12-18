@@ -18,19 +18,21 @@
 # ##### END GPL LICENCE BLOCK #####
 
 import bpy
+import os
+import json
 import time
 import gpu
 import bgl
 import numpy as np
 from bpy.props import *
-from bpy.types import Menu, Panel, AddonPreferences
+from bpy.types import Menu, Panel, AddonPreferences, Operator
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector, Matrix
 
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 0, 6),
+    'version': (1, 0, 7),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -68,7 +70,10 @@ def checkout_parent(obj):
     except AttributeError:
         objp = obj
     if obj.type == 'ARMATURE':
+        # if obj.proxy:
+        #     return obj.proxy
         objp = obj
+
     return objp
 
 
@@ -383,7 +388,7 @@ def update_mpath(self, context):
             fs = bpy.context.scene.frame_start
             fe = bpy.context.scene.frame_end
         if sc.onionsk_action_range:
-            all_keys = OS_OT_CreateUpdate_Skins.os_methos_keyframe(
+            all_keys = OS_OT_CreateUpdate_Skins.os_method_keyframe(
                 self, obj, objp, curframe, dont_create=True)
             fs = all_keys[2][0]
             fe = all_keys[2][-1]
@@ -395,7 +400,7 @@ def update_mpath(self, context):
         context.scene.frame_set(curframe)
         create_update_motion_path(context, mode, obj, fs, fe, [], [])
     if sc.onionsk_method == 'KEYFRAME':
-        return_count_kfb_kfa = OS_OT_CreateUpdate_Skins.os_methos_keyframe(
+        return_count_kfb_kfa = OS_OT_CreateUpdate_Skins.os_method_keyframe(
             self, obj, objp, curframe, dont_create=True)
         if not return_count_kfb_kfa:
             obj.select_set(True)
@@ -572,6 +577,15 @@ def actions_check(obj):
     return actions
 
 
+def apply_pref_settings():
+    prefs = bpy.context.preferences.addons[__name__].preferences
+    sc = bpy.context.scene.onion_skins_scene_props
+    for pr in prefs.__annotations__:
+        if pr == 'category' or pr == 'display_progress':
+            continue
+        exec("sc." + pr + " = prefs." + pr)
+
+
 def handler_check(handler, function_name):
     if len(handler) <= 0:
         return False
@@ -586,6 +600,9 @@ def OS_Initialization():
     params = bpy.context.window_manager.onionSkinsParams
     if params.onion_skins_init:
         return None
+    if 'onion_skins_scene_props' not in bpy.context.scene or\
+            not bpy.context.blend_data.filepath:
+        apply_pref_settings()
     prefs = bpy.context.preferences.addons[__name__].preferences
     sc = bpy.context.scene.onion_skins_scene_props
     remove_handlers(bpy.context)
@@ -622,18 +639,7 @@ def OS_Initialization():
         params.color_type = 'TEXTURE'
     if shading.color_type == 'OBJECT':
         params.color_type = 'OBJECT'
-    try:
-        m = bpy.data.materials[MAT_PREFIX + SUFFIX_before]
-    except KeyError:
-        sc.mat_color_bf = prefs.color_bf
-    try:
-        m = bpy.data.materials[MAT_PREFIX + SUFFIX_after]
-    except KeyError:
-        sc.mat_color_af = prefs.color_af
-    try:
-        m = bpy.data.materials[MAT_PREFIX + SUFFIX_marker]
-    except KeyError:
-        sc.mat_color_m = prefs.color_m
+
     load_os_list_settings()
     item_ob = get_active_index_obj(bpy.context)
     if item_ob:
@@ -893,7 +899,7 @@ class OS_PT_Colors_Panel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = "UI"
     bl_parent_id = "OS_PT_UI_Panel"
-    # bl_options = {'DEFAULT_CLOSED'}
+    bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(self, context):
@@ -1755,8 +1761,10 @@ def make_gpu_frame(obj, curframe, at_frame, skin_type=''):
         try:
             ob = bpy.context.view_layer.objects[i.name]
         except KeyError:
-            print("OS: Object '" + i.name + "' does not exists in the current view layer ( Skiped )")
-            continue
+            ob = bpy.data.objects[i.name]
+            if not ob.library:
+                print("OS: Object '" + i.name + "' does not exists in the current view layer ( Skiped )")
+                continue
         if ob.type == "MESH":
             bake = bake_gpu_mesh_piece(ob, curframe, at_frame, skin_type)
             if bake:
@@ -2050,7 +2058,7 @@ def remove_handlers(context):
     Draw_Handler = None
 
 
-class GPU_OT_Draw_Skins(bpy.types.Operator):
+class GPU_OT_Draw_Skins(Operator):
     bl_idname = "mos_op.gpu_draw_skins"
     bl_label = "GPU Draw Skins"
     bl_description = "Draw onion skins in 3D Viewport"
@@ -2212,7 +2220,7 @@ class GPU_OT_Draw_Skins(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
+class OS_OT_CreateUpdate_Skins(Operator):
     bl_label = 'Update Onion Skins'
     bl_idname = 'mos_op.make_skins'
     bl_description = "Update Mesh Onion Skins for the selected object"
@@ -2369,21 +2377,18 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
         kfafter = [key for key in all_keys if key > curframe]
         return kfbefore, kfafter, all_keys
 
-    def os_methos_keyframe(self, obj, objp, curframe, dont_create=False):
+    def os_method_keyframe(self, obj, objp, curframe, dont_create=False):
         sc = bpy.context.scene.onion_skins_scene_props
         params = bpy.context.window_manager.onionSkinsParams
         bf = sc.onionsk_kfr_before
         af = sc.onionsk_kfr_after
-        try:
+        if hasattr(obj.animation_data, 'action'):
             action = obj.animation_data.action
-        except AttributeError:
+        else:
             action = objp.animation_data.action
-        try:
-            if action.fcurves:
-                pass
-        except AttributeError:
+        if not hasattr(action, 'fcurves'):
             if not dont_create:
-                msg = "Mesh Onion Skins: Keys does not found. Use Edit strip mode of the action."
+                msg = "Mesh Onion Skins: Keys does not found. Use Edit strip mode of the action if animation data is not empty."
                 self.report({'ERROR'}, msg)
             return False
         kfb_kfa = OS_OT_CreateUpdate_Skins.get_keyframes(self, obj, action, curframe)
@@ -2577,7 +2582,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
                 self.fs = context.scene.frame_start
                 self.fe = context.scene.frame_end
             if sc.onionsk_action_range:
-                all_keys = self.os_methos_keyframe(obj, objp, curframe, dont_create=True)
+                all_keys = self.os_method_keyframe(obj, objp, curframe, dont_create=True)
                 self.fs = all_keys[2][0]
                 self.fe = all_keys[2][-1]
             # fix start to end
@@ -2588,7 +2593,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
             self.Frames = self.evaluate_frames(
                 self.objp, self.curframe, self.fs, self.fe, self.skip, 0, 0)
         if sc.onionsk_method == 'KEYFRAME':
-            self.Frames = self.os_methos_keyframe(obj, objp, curframe)
+            self.Frames = self.os_method_keyframe(obj, objp, curframe)
 
     def make_frame(self, Frame):
         sc = bpy.context.scene.onion_skins_scene_props
@@ -2677,7 +2682,7 @@ class OS_OT_CreateUpdate_Skins(bpy.types.Operator):
 ##############################################################################
 
 
-class OS_OT_Remove_Skins(bpy.types.Operator):
+class OS_OT_Remove_Skins(Operator):
     bl_label = 'Remove Skins'
     bl_idname = 'mos_op.remove_skins'
     bl_description = "Delete Mesh Onion Skins for the selected Object"
@@ -2740,7 +2745,7 @@ class OS_OT_Remove_Skins(bpy.types.Operator):
 ###############################################
 
 
-class OS_OT_Add_Marker(bpy.types.Operator):
+class OS_OT_Add_Marker(Operator):
     bl_label = 'Add Marker'
     bl_idname = 'mos_op.add_marker'
     bl_description = "Add a marker skin at the current frame"
@@ -2835,7 +2840,7 @@ class OS_OT_Add_Marker(bpy.types.Operator):
 ##############################################################################
 
 
-class OS_OT_Remove_Marker(bpy.types.Operator):
+class OS_OT_Remove_Marker(Operator):
     bl_label = 'Remove Markers'
     bl_idname = 'mos_op.remove_marker'
     bl_description = "Remove Markers from the selected object"
@@ -2874,7 +2879,7 @@ class OS_OT_Remove_Marker(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OS_OT_Update_Motion_Path(bpy.types.Operator):
+class OS_OT_Update_Motion_Path(Operator):
     bl_label = 'Update Motion Path'
     bl_idname = 'mos_op.update_motion_path'
     bl_description = "Update motion path for the selected object"
@@ -2884,7 +2889,7 @@ class OS_OT_Update_Motion_Path(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class OS_OT_Clear_Motion_Path(bpy.types.Operator):
+class OS_OT_Clear_Motion_Path(Operator):
     bl_label = 'Clear Motion Path'
     bl_idname = 'mos_op.clear_motion_path'
     bl_description = "Clear motion path for the selected object"
@@ -3023,6 +3028,8 @@ def get_selected_os_set_childrens():
         return get_collection_objects(params.active_obj_users_collection)
     if sc.selection_sets == "PARENT":
         obj = checkout_parent(bpy.context.active_object)
+        if obj.proxy:
+            return [ob for ob in childrens_lookup(obj.proxy) if ob.type == 'MESH']
         return [ob for ob in childrens_lookup(obj) if ob.type == 'MESH']
 
 
@@ -3215,7 +3222,7 @@ class OBJECT_list_settings(bpy.types.PropertyGroup):
     collection: bpy.props.StringProperty(name="collection")
 
 
-class WM_OT_list_uncheck_all(bpy.types.Operator):
+class WM_OT_list_uncheck_all(Operator):
     bl_label = 'Uncheck All'
     bl_idname = 'wm.os_uncheck_all_children_list'
     bl_description = "Uncheck all in the childrens list"
@@ -3225,7 +3232,7 @@ class WM_OT_list_uncheck_all(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_list_check_all(bpy.types.Operator):
+class WM_OT_list_check_all(Operator):
     bl_label = 'Check All'
     bl_idname = 'wm.os_check_all_children_list'
     bl_description = "Check all in the childrens list"
@@ -3236,7 +3243,7 @@ class WM_OT_list_check_all(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_list_save_settings(bpy.types.Operator):
+class WM_OT_list_save_settings(Operator):
     bl_label = 'Save List Settings'
     bl_idname = 'wm.os_save_list_settings'
     bl_description = "Save settings of the childrens list for the current object"
@@ -3246,7 +3253,7 @@ class WM_OT_list_save_settings(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_list_load_settings(bpy.types.Operator):
+class WM_OT_list_load_settings(Operator):
     bl_label = 'Load List Settings'
     bl_idname = 'wm.os_load_list_settings'
     bl_description = "Load settings of the childrens list for the current object"
@@ -3256,7 +3263,7 @@ class WM_OT_list_load_settings(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_update_childrens_list(bpy.types.Operator):
+class WM_OT_update_childrens_list(Operator):
     bl_label = 'Update Childrens List'
     bl_idname = 'wm.os_update_childrens_list'
     bl_description = "Update the childrens list of the active object"
@@ -3266,7 +3273,7 @@ class WM_OT_update_childrens_list(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class WM_OT_object_list_settings_remove(bpy.types.Operator):
+class WM_OT_object_list_settings_remove(Operator):
     bl_label = 'Remove List Settings'
     bl_idname = 'wm.os_list_settings_remove'
     bl_description = "Remove list settings of the active object"
@@ -3609,6 +3616,10 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
         description="Show onion skin frames in the 3D Viewport",
         default=False, update=update_draw_gpu_toggle)
 
+    # is_scene_settings: BoolProperty(
+    #     name="Is Settings",
+    #     default=False)
+
 
 def get_os_marker_frame_nums(self, context):
     sc = bpy.context.scene.onion_skins_scene_props
@@ -3752,9 +3763,9 @@ def update_pref_color_alpha(self, context):
 
 def update_pref_color_alpha_value(self, context):
     if self.color_alpha:
-        self.color_bf[3] = self.color_alpha_value
-        self.color_af[3] = self.color_alpha_value
-        self.color_m[3] = self.color_alpha_value
+        self.mat_color_bf[3] = self.color_alpha_value
+        self.mat_color_af[3] = self.color_alpha_value
+        self.mat_color_m[3] = self.color_alpha_value
 
 
 class Onion_Skins_Preferences(AddonPreferences):
@@ -3766,38 +3777,181 @@ class Onion_Skins_Preferences(AddonPreferences):
         default="Animation",
         update=update_panel
     )
-    color_bf: FloatVectorProperty(
+    mat_color_bf: FloatVectorProperty(
         name="Before",
         subtype="COLOR",
         size=4,
         min=0.0,
         max=1.0,
-        default=(0.1, 0.1, 1, 0.5),
-        # update=update_color_bf
+        default=(0.1, 0.1, 1, 0.3),
     )
-    color_af: FloatVectorProperty(
+    mat_color_af: FloatVectorProperty(
         name="After",
         subtype="COLOR",
         size=4,
         min=0.0,
         max=1.0,
-        default=(1, 0.1, 0.1, 0.5),
-        # update=update_color_af
+        default=(1, 0.1, 0.1, 0.3),
     )
-    color_m: FloatVectorProperty(
+    mat_color_m: FloatVectorProperty(
         name="Marker",
         subtype="COLOR",
         size=4,
         min=0.0,
         max=1.0,
-        default=(0, 0, 0, 0.5),
-        # update=update_color_m
+        default=(0, 0, 0, 0.3),
     )
+    fade_to_alpha: BoolProperty(
+        name="Fade to Alpha",
+        description="Fade onion skins to the edges of the frame range",
+        default=True)
+
+    fade_to_value: FloatProperty(
+        attr="fade_value",
+        name="Fade value",
+        description='Fade to Alpha color value',
+        step=5,
+        min=0.0, soft_min=0, max=1, soft_max=1, default=0.05,
+    )
+
+    color_alpha: BoolProperty(
+        name="Alpha",
+        description="Color alpha",
+        default=True, update=update_pref_color_alpha)
+
+    color_alpha_value: FloatProperty(
+        attr="color_alpha_value",
+        name="Alpha",
+        description='Color alpha value',
+        step=5,
+        min=0.0, soft_min=0, max=1, soft_max=1, default=0.3,
+        update=update_pref_color_alpha_value)
 
     display_progress: BoolProperty(
         name="Display Progress",
-        description="Draw Mode: Mesh: Show progress in the window UI while creating onion skins ( creating is slower while turned on )",
+        description="Draw Technic: Mesh: Show progress in the window UI while creating onion skins ( creating is slower while turned on )",
         default=True)
+
+    onionsk_tmarker: BoolProperty(
+        name='Time Markers',
+        description='Create time markers at frames',
+        default=True)
+
+    onionsk_mpath: BoolProperty(
+        name='Motion Path',
+        description='Show motion path of animated object',
+        default=False)
+
+    onionsk_method: EnumProperty(
+        name="Draw Frame Methods", items=[
+            ('FRAME', 'Around Frame',
+             "Set skinned frames interval around current frame position"),
+            ('KEYFRAME', 'Keyframes',
+             "Draw skins at nearest keyframes located around\
+              current frame position"),
+            ('SCENE', 'In Range', 'Set start and end farmes\
+              as a timeline interval')],
+        description='Set where to draw method', default='SCENE')
+
+    view_range: BoolProperty(
+        name='View Range',
+        description='Use the view range to show onion skins at a specific frame range around the current frame position and hide others',
+        default=False)
+
+    onionsk_fr_start: IntProperty(
+        attr="onionsk_fr_start",
+        name="onionsk_frames",
+        description='Start at frame number',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=0)
+
+    onionsk_fr_end: IntProperty(
+        attr="onionsk_fr_end",
+        name="onionsk_fr_end",
+        description='End at frame number',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=100)
+
+    onionsk_fr_before: IntProperty(
+        attr="onionsk_fr_before",
+        name="onionsk_fr_before",
+        description='Frames before current',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=10)
+
+    onionsk_fr_after: IntProperty(
+        attr="onionsk_fr_after",
+        name="onionsk_fr_after",
+        description='Frames after current',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=10)
+
+    onionsk_kfr_before: IntProperty(
+        attr="onionsk_fr_before",
+        name="onionsk_fr_before",
+        description='Keys before current frame',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=1)
+
+    onionsk_kfr_after: IntProperty(
+        attr="onionsk_kfr_after",
+        name="onionsk_kfr_after",
+        description='Keys after current frame',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=1)
+
+    view_before: IntProperty(
+        attr="view_before",
+        name="Backward",
+        description='View frames before current frame',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=5,
+        update=update_view_range)
+
+    view_after: IntProperty(
+        attr="view_after",
+        name="Forward",
+        description='View frames after current frame',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=5,
+        update=update_view_range)
+
+    onionsk_frame_step: IntProperty(
+        attr="onionsk_frame_step",
+        name="Frame Step",
+        description='Frames to skip* (1 = draw every frame)\nFirst and last input frames is always included',
+        min=1, soft_min=1, max=100, soft_max=100, default=5)
+
+    onionsk_fr_sc: BoolProperty(
+        attr="onionsk_fr_sc",
+        name='Playback range',
+        description='Use Start/End playback frames',
+        default=False, update=update_in_range_playback)
+
+    onionsk_action_range: BoolProperty(
+        name='Action range',
+        description='Use the current animation range',
+        default=False, update=update_in_range_action)
+
+    onionsk_skip: IntProperty(
+        attr="onionsk_skip",
+        name="Step",
+        description='Frames to skip (1 = draw every frame)',
+        min=1, soft_min=1, max=100, soft_max=100, default=1)
+
+    os_draw_mode: EnumProperty(
+        name="Draw Mode", items=[
+            ('GPU', 'GPU',
+             ''),
+            ('MESH', 'Mesh',
+             '')],
+        description='Set draw mode', default='GPU',
+        update=update_os_draw_technic)
+
+    use_all_keyframes: BoolProperty(
+        name='All Keyframes',
+        description='Use all keyframes of the current action to create onion skin at each of them',
+        default=False)
+
+    view_range_frame_type: EnumProperty(
+        name="View Frame Type", items=[
+            ('KEYFRAME', 'Keyframe',
+             "Use the timeline keyframes for view range"),
+            ('FRAME', 'Frame',
+             "Use the timeline frames for view range")],
+        description='Set type of frames for view range', default='KEYFRAME')
 
     def draw(self, context):
         layout = self.layout
@@ -3810,15 +3964,137 @@ class Onion_Skins_Preferences(AddonPreferences):
         flow = box.grid_flow(row_major=True, columns=3, even_columns=True, even_rows=False, align=True)
         col = flow.column(align=True)
         col.label(text="Before")
-        col.prop(self, 'color_bf', text='')  # , text="Before"
+        col.prop(self, 'mat_color_bf', text='')  # , text="Before"
         col = flow.column(align=True)
         col.label(text="After")
-        col.prop(self, 'color_af', text='')  # , text="After"
+        col.prop(self, 'mat_color_af', text='')  # , text="After"
         col = flow.column(align=True)
         col.label(text="Marker")
-        col.prop(self, 'color_m', text='')
+        col.prop(self, 'mat_color_m', text='')
+        row = box.row()
+        row.prop(self, 'color_alpha')
+        row.prop(self, 'color_alpha_value', text='')
+        rowf = row.row()
+        rowf.enabled = self.color_alpha
+        rowf.prop(self, 'fade_to_alpha')
+        row.prop(self, 'fade_to_value', text='')
+        box = layout.box()
+        box.label(text="Frames:")
+        row = box.row()
+        row.prop(self, 'onionsk_method', text='Method')
+
+        if self.onionsk_method == 'FRAME':
+            col = box.column(align=True)
+            split = box.split()
+            row = box.row()
+
+            row = split.row(align=True)
+            row.prop(self, "onionsk_fr_before", text="Before")
+            row.prop(self, "onionsk_fr_after", text="After")
+            row.prop(self, "onionsk_frame_step", text="Step")
+
+        if self.onionsk_method == 'KEYFRAME':
+            row = box.row()
+            row.prop(self, "use_all_keyframes")
+            col = box.column(align=True)
+            split = box.split()
+            row = box.row()
+
+            row = split.row(align=True)
+            row.enabled = not self.use_all_keyframes
+            row.prop(self, "onionsk_kfr_before", text="Before")
+            row.prop(self, "onionsk_kfr_after", text="After")
+
+        if self.onionsk_method == 'SCENE':
+            row = box.row()
+            row.prop(self, "onionsk_fr_sc", toggle=True)
+            row.prop(self, "onionsk_action_range", toggle=True)
+            col = box.column(align=True)
+            split = box.split()
+            row = box.row()
+
+            if self.onionsk_fr_sc or self.onionsk_action_range:
+                row = split.row(align=True)
+                row.prop(self, "onionsk_skip", text="Frame Step")
+            else:
+                row = split.row(align=True)
+                row.prop(self, "onionsk_fr_start", text="Start")
+                row.prop(self, "onionsk_fr_end", text="End")
+                row.prop(self, "onionsk_skip", text="Step")
+        row = box.row(align=True)
+        row.prop(self, 'view_range')
+        row = box.row(align=True)
+        row.prop(self, 'view_range_frame_type', expand=True)
+        row = box.row(align=True)
+        row.prop(self, 'view_before')
+        row.prop(self, 'view_after')
+
         row = layout.row()
+        row.prop(self, 'onionsk_tmarker')
+        row.prop(self, 'onionsk_mpath')
         row.prop(self, 'display_progress')
+
+        row = layout.row(align=True)
+        row.operator("mos_op.save_pref_settings", icon='EXPORT')
+        row.operator("mos_op.load_pref_settings", icon='IMPORT')
+
+
+class PREF_OT_Save_Settings(Operator):
+    bl_label = 'Save Settings'
+    bl_idname = 'mos_op.save_pref_settings'
+    bl_description = "Save preference settings to a json file"
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__name__].preferences
+        user_path = bpy.utils.resource_path('USER')
+        config_path = os.path.join(user_path, "config")
+        config_path = os.path.join(config_path, "mesh_onion_skins")
+        if not os.path.isdir(config_path):
+            os.mkdir(config_path, mode=0o777)
+        json_file = os.path.join(config_path, "mesh_onion_skins_settings.json")
+        pref_data = {}
+        for pr in prefs.__annotations__:
+            if pr.startswith('mat_'):
+                array = eval("prefs." + pr)
+                pref_data[pr] = [v for v in array]
+            else:
+                pref_data[pr] = eval("prefs." + pr)
+
+        with open(json_file, 'w', encoding='utf-8') as f:
+            json.dump(pref_data, f, ensure_ascii=False, indent=4)
+
+        msg = "Mesh Onion Skins: Settings has been saved to " + json_file
+        self.report({'INFO'}, msg)
+
+        return {'FINISHED'}
+
+
+class PREF_OT_Load_Settings(Operator):
+    bl_label = 'Load Settings'
+    bl_idname = 'mos_op.load_pref_settings'
+    bl_description = "Load preference settings from saved json file"
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__name__].preferences
+        user_path = bpy.utils.resource_path('USER')
+        config_path = os.path.join(user_path, "config")
+        config_path = os.path.join(config_path, "mesh_onion_skins")
+        json_file = os.path.join(config_path, "mesh_onion_skins_settings.json")
+        if not os.path.isfile(json_file):
+            msg = "Mesh Onion Skins: The settings file does not exist or it have not been saved yet."
+            self.report({'WARNING'}, msg)
+            return {'FINISHED'}
+        f = open(json_file)
+        pref_data = json.load(f)
+        for pr in pref_data:
+            value = pref_data.get(pr)
+            exec("if hasattr(prefs, pr): prefs." + pr + " = value")
+        f.close()
+
+        msg = "Mesh Onion Skins: Settings has been loaded from " + json_file
+        self.report({'INFO'}, msg)
+
+        return {'FINISHED'}
 
 
 class WM_MT_List_Ops(Menu):
@@ -3833,7 +4109,7 @@ class WM_MT_List_Ops(Menu):
         layout.operator("wm.os_list_settings_remove", icon='X')
 
 
-class WM_MT_Marker_List_Popup(bpy.types.Operator):
+class WM_MT_Marker_List_Popup(Operator):
     bl_label = 'Select Markers to Delete'
     bl_idname = 'mos_wm.delete_selected_markers'
     bl_description = "Delete the specific marker at frame number"
@@ -4057,6 +4333,8 @@ classes = [
     OnionSkinsParams,
     OnionSkins_Scene_Props,
     Onion_Skins_Preferences,
+    PREF_OT_Save_Settings,
+    PREF_OT_Load_Settings,
 ]
 
 
