@@ -14,7 +14,7 @@
 
 Supported Blender version: **2.83+**
 
-[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.6/Mesh_Onion_Skins106.zip) <- file
+[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.7/Mesh_Onion_Skins107.zip) <- file
 
 **INSTALLATION**
 - Open Blender and select **Edit->Preferences**
