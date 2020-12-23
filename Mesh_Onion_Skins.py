@@ -3854,15 +3854,6 @@ class Onion_Skins_Preferences(AddonPreferences):
         description='Frames to skip (1 = draw every frame)',
         min=1, soft_min=1, max=100, soft_max=100, default=1)
 
-    os_draw_mode: EnumProperty(
-        name="Draw Mode", items=[
-            ('GPU', 'GPU',
-             ''),
-            ('MESH', 'Mesh',
-             '')],
-        description='Set draw mode', default='GPU',
-        update=update_os_draw_technic)
-
     use_all_keyframes: BoolProperty(
         name='All Keyframes',
         description='Use all keyframes of the current action to create onion skin at each of them',
