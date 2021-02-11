@@ -14,7 +14,7 @@
 
 Supported Blender version: **2.83+**
 
-[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.7/Mesh_Onion_Skins107.zip) <- file
+[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.8/Mesh_Onion_Skins108.zip) <- file
 
 **INSTALLATION**
 - Open Blender and select **Edit->Preferences**
@@ -33,6 +33,13 @@ Supported Blender version: **2.83+**
 
 ![SelectionVisibility_lin|690x486](images/SelectionVisibility_lin.png)
 
+**CHANGE LOG**
+
+*Mesh Onion Skins 1.0.8*
+
+- Added support of Sculpt mode, that can be used with the Keymesh add-on. Only Solid Viewport Shading is working with the GPU draw in that mode. Please, use the latest version of Keymesh add-on located on the page of the developer https://github.com/pablodp606/keymesh-addon
+
 **Support the Developer**
 
 You can support me here https://gumroad.com/l/OqkKG, Thanks!
+
