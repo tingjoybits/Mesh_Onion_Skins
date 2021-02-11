@@ -32,7 +32,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 0, 7),
+    'version': (1, 0, 8),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -608,7 +608,9 @@ def OS_Initialization():
 def poll_check(context):
     if not context.active_object:
         return False
-    if context.mode != 'OBJECT' and context.mode != 'POSE':
+    if context.mode != 'OBJECT' and\
+            context.mode != 'POSE' and\
+            context.mode != 'SCULPT':
         return False
     if not hasattr(context.active_object, 'type'):
         return False
@@ -632,6 +634,9 @@ def check_draw_gpu_toggle(scene):
     if poll_check(bpy.context):
         Active_Object = bpy.context.active_object
     else:
+        return None
+    if not hasattr(Active_Object, 'is_onionsk') and\
+            not hasattr(Active_Object, 'is_os_marker'):
         return None
     if Active_Object.is_onionsk or Active_Object.is_os_marker:
         if sc.onionsk_tmarker:
@@ -1424,7 +1429,10 @@ def fade_onion_colors(sk_names, skin_prefix, mat_color, count, view_range=False)
         for n in sk_frame_names:  # skinprefix_name_framenumber# (before_Cube_10)
             s = get_fade_skin_object(n, view_range)
             mat = get_fade_os_material(s)
-            s.data.materials[0] = mat
+            if s.data.materials:
+                s.data.materials[0] = mat
+            else:
+                s.data.materials.append(mat)
             if multiply == 0:
                 if skin_prefix == 'after':
                     multiply = multiply + 1
@@ -1508,8 +1516,10 @@ def rename_os_mesh(obj, OSkin, at_frame, current_frame, skin_type='ONION'):
             OSkin.name = 'before_' + obj.name + '_' + str(int(at_frame))
         if at_frame >= current_frame:
             OSkin.name = 'after_' + obj.name + '_' + str(int(at_frame))
+        OSkin.data.name = 'mos_' + obj.name + '_' + str(int(at_frame))
     if skin_type == 'MARKER':
         OSkin.name = 'marker_' + obj.name + '_' + str(int(at_frame))
+        OSkin.data.name = 'mosm_' + obj.name + '_' + str(int(at_frame))
 
 
 def make_duplicate_mesh(obj, parent_empty, at_frame, current_frame):
@@ -1588,6 +1598,13 @@ def make_duplicate_mesh(obj, parent_empty, at_frame, current_frame):
     return OSkin
 
 
+def clear_keymesh_props(OSkin):
+    if OSkin.get('km_datablock') is not None:
+        OSkin['km_datablock'] = None
+    if OSkin.data.get('km_datablock') is not None:
+        OSkin.data['km_datablock'] = None
+
+
 def make_skin_mesh_piece(obj, parent_empty, current_frame, at_frame, skin_type='ONION'):
     sc = bpy.context.scene.onion_skins_scene_props
     obj.select_set(True)
@@ -1595,6 +1612,7 @@ def make_skin_mesh_piece(obj, parent_empty, current_frame, at_frame, skin_type='
     Skins = make_duplicate_mesh(obj, parent_empty, at_frame, current_frame)
     if not Skins:
         return False
+    clear_keymesh_props(Skins)
     rename_os_mesh(obj, Skins, at_frame, current_frame, skin_type)
     # Apply Colors
     if sc.onionsk_colors:
@@ -1623,7 +1641,7 @@ def make_onionSkin_frame(self, obj, parent_empty, current_frame, at_frame, skin_
         try:
             ob = bpy.context.view_layer.objects[i.name]
         except KeyError:
-            print("OS: Object '" + i.name + "' does not exists in the current view layer ( Skiped )")
+            print("OS: Object '" + i.name + "' does not exist in the current view layer ( Skiped )")
             continue
         if ob.type == "MESH":
             dublicate_own_material(ob.name)
