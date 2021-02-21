@@ -32,7 +32,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 0, 8),
+    'version': (1, 0, 9),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -330,6 +330,12 @@ def update_view_range(self, context):
         self.fade_to_alpha = True
     else:
         self.fade_to_alpha = False
+
+
+def update_view_range_frame_type(self, context):
+    if not self.os_draw_mode == 'MESH':
+        return None
+    view_range_frames(context.scene)
 
 
 def NoKeysError(self, context):
@@ -1013,7 +1019,7 @@ class OS_PT_View_Range_Panel(Panel):
         sc = bpy.context.scene.onion_skins_scene_props
         layout = self.layout
         row = layout.row(align=True)
-        if sc.os_draw_mode == 'GPU' and sc.onionsk_method == 'KEYFRAME':
+        if sc.onionsk_method == 'KEYFRAME':
             row.prop(sc, 'view_range_frame_type', expand=True)
         row = layout.row(align=True)
         row.prop(sc, 'view_before')
@@ -1522,62 +1528,17 @@ def rename_os_mesh(obj, OSkin, at_frame, current_frame, skin_type='ONION'):
         OSkin.data.name = 'mosm_' + obj.name + '_' + str(int(at_frame))
 
 
-def make_duplicate_mesh(obj, parent_empty, at_frame, current_frame):
+def make_duplicate_mesh(obj, parent_empty):
     sc = bpy.context.scene.onion_skins_scene_props
-    params = bpy.context.window_manager.onionSkinsParams
     if obj.type != "MESH":
         return False
 
-    locw = obj.matrix_world
-    bpy.ops.object.duplicate()
-    try:
-        OSkin = bpy.context.selected_objects[0]
-        print('OS Dublicate:', obj.name)
-    except IndexError:
-        print('OS Dublicate:', obj.name, '  <- Skiped')
-        return False
-    # Animation Data Actions if exists
-    try:
-        skin_action = OSkin.animation_data.action
-    except AttributeError:
-        skin_action = False
-    try:
-        shape_keys_action = OSkin.data.shape_keys.animation_data.action
-    except AttributeError:
-        shape_keys_action = False
-    OSkin.animation_data_clear()
-    # Remove Shape Keys before Armature modifier can be applied
-    bpy.context.view_layer.objects.active = OSkin
-    try:
-        shape_keys_name = OSkin.data.shape_keys.name
-    except AttributeError:
-        shape_keys_name = False
-    if shape_keys_name:
-        OSkin.shape_key_add(from_mix=True)
-        # bpy.data.shape_keys[shape_keys_name].user_clear()
-        for k in OSkin.data.shape_keys.key_blocks:
-            OSkin.shape_key_remove(k)
-        bpy.data.shape_keys[shape_keys_name].user_clear()
-    # Apply All Armature modifiers to Skins
-    for modif in OSkin.modifiers:
-        if modif.type == 'ARMATURE':
-            bpy.ops.object.modifier_apply(modifier=modif.name)
-        elif modif.type == 'MESH_DEFORM':
-            bpy.ops.object.modifier_apply(modifier=modif.name)
-    # Remove Actions Copied data if exists
-    if skin_action:
-        bpy.data.actions.remove(skin_action, do_unlink=True)
-    if shape_keys_action and bpy.app.version < (2, 90, 0):
-        bpy.data.actions.remove(shape_keys_action, do_unlink=True)  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # Clear all parents
-    bpy.ops.object.parent_clear(type='CLEAR')
-    # Move to exactly same location as original object
-    OSkin.matrix_world = locw
-    # Deselect the original object
-    obj.select_set(False)
-    # Move to Onion Skins Collection
-    parent_collection = OSkin.users_collection[0]
-    parent_collection.objects.unlink(OSkin)
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    tmp_obj_pose = obj.evaluated_get(depsgraph)
+
+    newMesh = bpy.data.meshes.new_from_object(tmp_obj_pose)
+    newMesh.transform(obj.matrix_world)
+    OSkin = bpy.data.objects.new("object_name", newMesh)
     bpy.data.collections[OS_collection_name].objects.link(OSkin)
     # Make skin a child of the EMPTY
     OSkin.parent = parent_empty
@@ -1598,21 +1559,11 @@ def make_duplicate_mesh(obj, parent_empty, at_frame, current_frame):
     return OSkin
 
 
-def clear_keymesh_props(OSkin):
-    if OSkin.get('km_datablock') is not None:
-        OSkin['km_datablock'] = None
-    if OSkin.data.get('km_datablock') is not None:
-        OSkin.data['km_datablock'] = None
-
-
 def make_skin_mesh_piece(obj, parent_empty, current_frame, at_frame, skin_type='ONION'):
     sc = bpy.context.scene.onion_skins_scene_props
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-    Skins = make_duplicate_mesh(obj, parent_empty, at_frame, current_frame)
+    Skins = make_duplicate_mesh(obj, parent_empty)
     if not Skins:
         return False
-    clear_keymesh_props(Skins)
     rename_os_mesh(obj, Skins, at_frame, current_frame, skin_type)
     # Apply Colors
     if sc.onionsk_colors:
@@ -1641,8 +1592,10 @@ def make_onionSkin_frame(self, obj, parent_empty, current_frame, at_frame, skin_
         try:
             ob = bpy.context.view_layer.objects[i.name]
         except KeyError:
-            print("OS: Object '" + i.name + "' does not exist in the current view layer ( Skiped )")
-            continue
+            ob = bpy.data.objects[i.name]
+            if not ob.library:
+                print("OS: Object '" + i.name + "' does not exist in the current view layer ( Skiped )")
+                continue
         if ob.type == "MESH":
             dublicate_own_material(ob.name)
             make = make_skin_mesh_piece(ob, parent_empty, current_frame, at_frame, skin_type)
@@ -1656,7 +1609,6 @@ def bake_gpu_mesh_piece(obj, curframe, at_frame, skin_type=''):
     depsgraph = bpy.context.evaluated_depsgraph_get()
     tmp_obj_pose = obj.evaluated_get(depsgraph)
     mesh = tmp_obj_pose.to_mesh()
-    mesh.update()
     mesh.update()
     position = Matrix(obj.matrix_world)
     mesh.transform(position)
@@ -2463,14 +2415,9 @@ class OS_OT_CreateUpdate_Skins(Operator):
         params = bpy.context.window_manager.onionSkinsParams
         prefs = bpy.context.preferences.addons[__name__].preferences
         self.mode = context.mode
-        # obj = context.selected_objects[0]
         obj = self.obj
         # Check object is a parent or a child
         objp = self.objp
-        if (objp.override_library or obj.override_library) and sc.os_draw_mode == 'MESH':
-            msg = "Mesh Onion Skins: 'Mesh' mode does not work with overrided libraries, use 'GPU' mode instead."
-            self.report({'ERROR'}, msg)
-            return {'FINISHED'}
         if objp.type == 'ARMATURE' and\
                 not context.window_manager.os_childrens_collection:
             msg = "Mesh Onion Skins: Mesh type objects didn't found."
@@ -2698,10 +2645,6 @@ class OS_OT_Add_Marker(Operator):
         obj = context.active_object
         # Check to see if object is a parent or a child
         objp = checkout_parent(obj)
-        if (objp.override_library or obj.override_library) and sc.os_draw_mode == 'MESH':
-            msg = "'Mesh' mode does not work with overrided libraries, use 'GPU' mode instead."
-            self.report({'ERROR'}, msg)
-            return {'FINISHED'}
         tmarkers = bpy.context.scene.timeline_markers
         curframe = bpy.context.scene.frame_current
         # start at current frame
@@ -2968,7 +2911,7 @@ def get_selected_os_set_childrens():
         return get_collection_objects(params.active_obj_users_collection)
     if sc.selection_sets == "PARENT":
         obj = checkout_parent(bpy.context.active_object)
-        if obj.proxy and sc.os_draw_mode == 'GPU':
+        if obj.proxy:
             obj = obj.proxy
         return [ob for ob in childrens_lookup(obj) if ob.type == 'MESH']
 
@@ -3456,7 +3399,8 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
              "Use the timeline keyframes for view range"),
             ('FRAME', 'Frame',
              "Use the timeline frames for view range")],
-        description='Set type of frames for view range', default='KEYFRAME')
+        description='Set type of frames for view range', default='KEYFRAME',
+        update=update_view_range_frame_type)
 
     onionsk_tmarker: BoolProperty(
         attr="onionsk_tmarker",
@@ -3885,6 +3829,14 @@ class Onion_Skins_Preferences(AddonPreferences):
              "Use the timeline frames for view range")],
         description='Set type of frames for view range', default='KEYFRAME')
 
+    os_draw_mode: EnumProperty(
+        name="Draw Mode", items=[
+            ('GPU', 'GPU',
+             ''),
+            ('MESH', 'Mesh',
+             '')],
+        description='Set draw mode', default='GPU')
+
     def draw(self, context):
         layout = self.layout
         row = layout.row()
@@ -3910,6 +3862,8 @@ class Onion_Skins_Preferences(AddonPreferences):
         rowf.enabled = self.color_alpha
         rowf.prop(self, 'fade_to_alpha')
         row.prop(self, 'fade_to_value', text='')
+        row = layout.row()
+        row.prop(self, 'os_draw_mode')
         box = layout.box()
         box.label(text="Frames:")
         row = box.row()
@@ -3955,8 +3909,9 @@ class Onion_Skins_Preferences(AddonPreferences):
                 row.prop(self, "onionsk_skip", text="Step")
         row = box.row(align=True)
         row.prop(self, 'view_range')
-        row = box.row(align=True)
-        row.prop(self, 'view_range_frame_type', expand=True)
+        if self.onionsk_method == 'KEYFRAME':
+            row = box.row(align=True)
+            row.prop(self, 'view_range_frame_type', expand=True)
         row = box.row(align=True)
         row.prop(self, 'view_before')
         row.prop(self, 'view_after')
@@ -4181,6 +4136,22 @@ def set_view_range_props(scene, s, view_range, s_type):
     return False
 
 
+def get_view_range_keyframes(curframe, tree_skin, frames_count):
+    sc = bpy.context.scene.onion_skins_scene_props
+    before_frames = sc.view_before - 1
+    after_frames = sc.view_after - 1
+    item_frame = int(float(tree_skin.name.split('_')[-1]))
+    if item_frame < curframe:
+        bf = [f for f in frames_count if f < curframe]
+        bf.reverse()
+        before = [f for i, f in enumerate(bf) if i <= before_frames]
+        return before
+    else:
+        af = [f for f in frames_count if f > curframe]
+        after = [f for i, f in enumerate(af) if i <= after_frames]
+        return after
+
+
 def view_range_frames(scene):
     global CREATING
     if CREATING:
@@ -4195,17 +4166,40 @@ def view_range_frames(scene):
         return None
     sk_names_before = []
     sk_names_after = []
+    frames_count = list(set([(int(float(f.name.split('_')[-1])), i) for i, f in enumerate(tree.children)]))
+    frames_count.sort()
+    frames_count = dict(frames_count)
     for s in tree.children:
-        if scene.frame_current - 1 >= scene.frame_current - sc.view_before and \
-                sc.hide_os_before:
-            if set_view_range_props(scene, s, sc.view_before, 'before'):
-                sk_names_before.append(s.name)
-                continue
-        if scene.frame_current + 1 <= scene.frame_current + sc.view_after and \
-                sc.hide_os_after:
-            if set_view_range_props(scene, s, sc.view_after, 'after'):
-                sk_names_after.append(s.name)
-                continue
+        if sc.onionsk_method == 'KEYFRAME' and sc.view_range_frame_type == 'KEYFRAME':
+            item_frame = int(float(s.name.split('_')[-1]))
+            if item_frame in get_view_range_keyframes(scene.frame_current, s, frames_count):
+                if item_frame < scene.frame_current and sc.hide_os_before:
+                    set_view_colors(s, 'before')
+                    sk_names_before.append(s.name)
+                    if s.hide_viewport:
+                        s.hide_viewport = False
+                    if sc.show_in_render:
+                        s.hide_render = False
+                    continue
+                if item_frame > scene.frame_current and sc.hide_os_after:
+                    set_view_colors(s, 'after')
+                    sk_names_after.append(s.name)
+                    if s.hide_viewport:
+                        s.hide_viewport = False
+                    if sc.show_in_render:
+                        s.hide_render = False
+                    continue
+        else:
+            if scene.frame_current - 1 >= scene.frame_current - sc.view_before and \
+                    sc.hide_os_before:
+                if set_view_range_props(scene, s, sc.view_before, 'before'):
+                    sk_names_before.append(s.name)
+                    continue
+            if scene.frame_current + 1 <= scene.frame_current + sc.view_after and \
+                    sc.hide_os_after:
+                if set_view_range_props(scene, s, sc.view_after, 'after'):
+                    sk_names_after.append(s.name)
+                    continue
         if not s.hide_viewport:
             s.hide_viewport = True
         if not s.hide_render:
