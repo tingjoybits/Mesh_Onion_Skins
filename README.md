@@ -14,7 +14,7 @@
 
 Supported Blender version: **2.83+**
 
-[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.8/Mesh_Onion_Skins108.zip) <- file
+[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.9/Mesh_Onion_Skins109.zip) <- file
 
 **INSTALLATION**
 - Open Blender and select **Edit->Preferences**
@@ -34,6 +34,13 @@ Supported Blender version: **2.83+**
 ![SelectionVisibility_lin|690x486](images/SelectionVisibility_lin.png)
 
 **CHANGE LOG**
+
+**Mesh Onion Skins 1.0.9**
+
+This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a slower approach, but a more convenient solution in some cases.
+- Improve mesh creation, make it more reliable and much faster (real fast if 'Display Progress' turned off)
+- Added the keyframes view range frames type for 'Keyframes' draw method, similar as it is in GPU mode.
+- Added support for overridden libraries and proxies. (A small tip for proxy rigs, just make sure that rig hierarchy tree in library file does not contain animation data)
 
 **Mesh Onion Skins 1.0.8**
 
