@@ -40,7 +40,7 @@ Supported Blender version: **2.83+**
 This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a slower approach, but a more convenient solution in some cases.
 - Improve mesh creation, make it more reliable and much faster (real fast if 'Display Progress' turned off)
 - Added the keyframes view range frames type for 'Keyframes' draw method, similar as it is in GPU mode.
-- Added support for overridden libraries and proxies. (A small tip for proxy rigs, just make sure that rig hierarchy tree in library file does not contain animation data)
+- Added support for overridden libraries and proxies. (A small tip for proxy rigs, just make sure that rig hierarchy tree in library file does not contain animation data. It might break some rig functionality, but will help you to solve some issues if you find any.)
 
 **Mesh Onion Skins 1.0.8**
 
