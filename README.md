@@ -1,3 +1,16 @@
+Supported Blender version: **2.83+**
+
+[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.9/Mesh_Onion_Skins109.zip) <- file
+
+**INSTALLATION**
+- Open Blender and select **Edit->Preferences**
+
+- Click **Add-ons**  category and then **'Install...'**  button
+
+- Select the downloaded archive file
+
+- Check the **'Mesh Onion Skins'**  option in the add-on dialog
+
 ![MESH ONION SKINS540|690x388](images/MESH_ONION_SKINS540.png)
 
 **Mesh Onion Skins**  is a Blender add-on that helps to create and analyze object or character animation. Onion skinning, in computer graphics, is a technique used in creating animations to see several frames at once. This way, the animator can make decisions on how to create or change a frame based on the previous frame in the sequence.
@@ -11,19 +24,6 @@
 ![bball_gif|320x180, 100%](images/bball_gif.gif) 
 
 ![os_mannequin|690x388](images/os_mannequin540.gif) 
-
-Supported Blender version: **2.83+**
-
-[**Download**](https://github.com/tingjoybits/Mesh_Onion_Skins/releases/download/1.0.9/Mesh_Onion_Skins109.zip) <- file
-
-**INSTALLATION**
-- Open Blender and select **Edit->Preferences**
-
-- Click **Add-ons**  category and then **'Install...'**  button
-
-- Select the downloaded archive file
-
-- Check the **'Mesh Onion Skins'**  option in the add-on dialog
 
 **OVERVIEW**
 
