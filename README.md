@@ -47,7 +47,3 @@ This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a sl
 - Added support of Sculpt mode, that can be used with the Keymesh add-on. Only Solid Viewport Shading is working with the GPU draw in that mode. Please, use the latest version of Keymesh add-on located on the page of the developer https://github.com/pablodp606/keymesh-addon
 (Blender 2.92+ is strongly recommended)
 
-**Support the Developer**
-
-You can support me here https://gumroad.com/l/OqkKG, Thanks!
-
