@@ -7,7 +7,7 @@ Supported Blender version: **2.83+**
 
 - Click **Add-ons**  category and then **'Install...'**  button
 
-- Select the downloaded archive file
+- Select the downloaded archive file from download link (The archive downloaded from 'Code' button won't work, please use the releases)
 
 - Check the **'Mesh Onion Skins'**  option in the add-on dialog
 
@@ -27,7 +27,11 @@ Supported Blender version: **2.83+**
 
 **OVERVIEW**
 
-![FramesKeyframes_lin|690x436](images/FramesKeyframes_lin.png) 
+![FramesKeyframes_lin|690x436](images/FramesKeyframes_lin.png)
+
+**Support the Developer**
+
+You can support me here https://gumroad.com/l/OqkKG, Thanks!
 
 ![OptionsColors_lin|690x485](images/OptionsColors_lin.png) 
 
