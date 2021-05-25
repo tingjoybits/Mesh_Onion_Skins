@@ -557,7 +557,6 @@ def handler_check(handler, function_name):
         func = str(handler[i]).split(' ')[1]
         if func == function_name:
             return True
-    print('register', function_name)
     return False
 
 
