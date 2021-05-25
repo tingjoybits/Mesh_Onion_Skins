@@ -39,6 +39,12 @@ You can support me here https://gumroad.com/l/OqkKG, Thanks!
 
 **CHANGE LOG**
 
+**Mesh Onion Skins 1.1.0**
+
+- Prepare the use of the GPU module in Blender 3.0.0 in case of bgl module become obsolete.
+- Use active object instead of selection while updating motion path.
+- Fix various handlers not being removed on unregister.
+
 **Mesh Onion Skins 1.0.9**
 
 This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a slower approach, but a more convenient solution in some cases.
