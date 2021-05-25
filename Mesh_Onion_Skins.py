@@ -22,7 +22,8 @@ import os
 import json
 import time
 import gpu
-import bgl
+if bpy.app.version < (3, 0, 0):
+    import bgl
 import numpy as np
 from bpy.props import *
 from bpy.types import Menu, Panel, AddonPreferences, Operator
@@ -32,7 +33,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 0, 9),
+    'version': (1, 1, 0),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -354,7 +355,7 @@ def update_mpath(self, context):
         return None
     wm = context.window_manager
     mode = context.mode
-    obj = context.selected_objects[0]
+    obj = context.active_object
     global CREATING
     CREATING = True
     OSkins = Onion_Skins(obj=obj)
@@ -556,7 +557,25 @@ def handler_check(handler, function_name):
         func = str(handler[i]).split(' ')[1]
         if func == function_name:
             return True
+    print('register', function_name)
     return False
+
+
+def check_handlers():
+    if not handler_check(bpy.app.handlers.load_post, "m_os_on_file_load"):
+        bpy.app.handlers.load_post.append(m_os_on_file_load)
+    if not handler_check(bpy.app.handlers.depsgraph_update_post, "m_os_post_dpgraph_update"):
+        bpy.app.handlers.depsgraph_update_post.append(m_os_post_dpgraph_update)
+    if not handler_check(bpy.app.handlers.save_pre, "m_os_pre_save"):
+        bpy.app.handlers.save_pre.append(m_os_pre_save)
+    if not handler_check(bpy.app.handlers.frame_change_post, "m_os_post_frames_handler"):
+        bpy.app.handlers.frame_change_post.append(m_os_post_frames_handler)
+    if not handler_check(bpy.app.handlers.render_pre, "m_os_pre_render_handler"):
+        bpy.app.handlers.render_pre.append(m_os_pre_render_handler)
+    if not handler_check(bpy.app.handlers.render_post, "m_os_post_render_handler"):
+        bpy.app.handlers.render_post.append(m_os_post_render_handler)
+    if not handler_check(bpy.app.handlers.render_cancel, "m_os_cancel_render_handler"):
+        bpy.app.handlers.render_cancel.append(m_os_cancel_render_handler)
 
 
 def OS_Initialization():
@@ -574,20 +593,7 @@ def OS_Initialization():
     GPU_FRAMES.clear()
     GPU_MARKERS.clear()
 
-    if not handler_check(bpy.app.handlers.load_post, "m_os_on_file_load"):
-        bpy.app.handlers.load_post.append(m_os_on_file_load)
-    if not handler_check(bpy.app.handlers.depsgraph_update_post, "m_os_post_dpgraph_update"):
-        bpy.app.handlers.depsgraph_update_post.append(m_os_post_dpgraph_update)
-    if not handler_check(bpy.app.handlers.save_pre, "m_os_pre_save"):
-        bpy.app.handlers.save_pre.append(m_os_pre_save)
-    if not handler_check(bpy.app.handlers.frame_change_post, "m_os_post_frames_handler"):
-        bpy.app.handlers.frame_change_post.append(m_os_post_frames_handler)
-    if not handler_check(bpy.app.handlers.render_pre, "m_os_pre_render_handler"):
-        bpy.app.handlers.render_pre.append(m_os_pre_render_handler)
-    if not handler_check(bpy.app.handlers.render_post, "m_os_post_render_handler"):
-        bpy.app.handlers.render_post.append(m_os_post_render_handler)
-    if not handler_check(bpy.app.handlers.render_cancel, "m_os_cancel_render_handler"):
-        bpy.app.handlers.render_cancel.append(m_os_cancel_render_handler)
+    check_handlers()
 
     if prefs.display_progress:
         params.display_progress = True
@@ -2012,6 +2018,54 @@ class GPU_OT_Draw_Skins(Operator):
             fade = ((colorA[3] - sc.fade_to_value) / after_frames) * (frame_diff - 1)
         return fade
 
+    def batch_draw(self, batch, skin_type=''):
+        sc = bpy.context.scene.onion_skins_scene_props
+        prefs = bpy.context.preferences.addons[__name__].preferences
+        if bpy.app.version < (3, 0, 0):
+            if not sc.gpu_mask_oskins and skin_type == 'ONION':
+                bgl.glDepthMask(False)
+            elif skin_type == 'ONION':
+                bgl.glDepthMask(True)
+            if not sc.gpu_mask_markers and skin_type == 'MARKER':
+                bgl.glDepthMask(False)
+            elif skin_type == 'MARKER':
+                bgl.glDepthMask(True)
+            bgl.glEnable(bgl.GL_DEPTH_TEST)
+            if prefs.gl_cull_face:
+                bgl.glEnable(bgl.GL_CULL_FACE)
+            if not sc.gpu_flat_colors:
+                bgl.glEnable(bgl.GL_BLEND)
+            if sc.gpu_colors_in_front:
+                bgl.glDepthRange(1, 0)
+
+            batch.draw(SHADER)
+            bgl.glDisable(bgl.GL_BLEND)
+            bgl.glDisable(bgl.GL_CULL_FACE)
+            bgl.glDisable(bgl.GL_DEPTH_TEST)
+        else:
+            if not sc.gpu_mask_oskins and skin_type == 'ONION':
+                gpu.state.depth_mask_set(False)
+            elif skin_type == 'ONION':
+                gpu.state.depth_mask_set(True)
+            if not sc.gpu_mask_markers and skin_type == 'MARKER':
+                gpu.state.depth_mask_set(False)
+            elif skin_type == 'MARKER':
+                gpu.state.depth_mask_set(True)
+            if sc.gpu_colors_in_front:
+                gpu.state.depth_test_set('ALWAYS')
+            else:
+                gpu.state.depth_test_set('LESS_EQUAL')
+            if prefs.gl_cull_face:
+                gpu.state.face_culling_set('BACK')
+            if not sc.gpu_flat_colors:
+                gpu.state.blend_set('ALPHA')
+
+            batch.draw(SHADER)
+            if sc.gpu_mask_oskins and skin_type == 'ONION':
+                gpu.state.depth_mask_set(False)
+            if sc.gpu_mask_markers and skin_type == 'MARKER':
+                gpu.state.depth_mask_set(False)
+
     def draw_gpu_frames(self, context):
         if not context.active_object or not context.space_data.overlay.show_overlays:
             return None
@@ -2024,24 +2078,11 @@ class GPU_OT_Draw_Skins(Operator):
         colorA = sc.mat_color_af
         colorM = sc.mat_color_m
         if sc.hide_os_marker and GPU_MARKERS.get(obj.name):
-            for item in GPU_MARKERS[obj.name]:
-                color = (colorM[0], colorM[1], colorM[2], colorM[3])
-                SHADER.bind()
-                SHADER.uniform_float("color", color)
-                if not sc.gpu_mask_markers:
-                    bgl.glDepthMask(False)
-                bgl.glEnable(bgl.GL_DEPTH_TEST)
-                if prefs.gl_cull_face:
-                    bgl.glEnable(bgl.GL_CULL_FACE)
-                if not sc.gpu_flat_colors:
-                    bgl.glEnable(bgl.GL_BLEND)
-                if sc.gpu_colors_in_front:
-                    bgl.glDepthRange(1, 0)
-
-                GPU_MARKERS[obj.name][item].draw(SHADER)
-                bgl.glDisable(bgl.GL_BLEND)
-                bgl.glDisable(bgl.GL_CULL_FACE)
-                bgl.glDisable(bgl.GL_DEPTH_TEST)
+            color = (colorM[0], colorM[1], colorM[2], colorM[3])
+            SHADER.bind()
+            SHADER.uniform_float("color", color)
+            for i, item in enumerate(GPU_MARKERS[obj.name]):
+                self.batch_draw(GPU_MARKERS[obj.name][item], 'MARKER')
 
         if not GPU_FRAMES.get(obj.name):
             return None
@@ -2079,20 +2120,7 @@ class GPU_OT_Draw_Skins(Operator):
             if curframe != item_frame and draw:
                 SHADER.bind()
                 SHADER.uniform_float("color", color)
-                if not sc.gpu_mask_oskins:
-                    bgl.glDepthMask(False)
-                bgl.glEnable(bgl.GL_DEPTH_TEST)
-                if prefs.gl_cull_face:
-                    bgl.glEnable(bgl.GL_CULL_FACE)
-                if not sc.gpu_flat_colors:
-                    bgl.glEnable(bgl.GL_BLEND)
-                if sc.gpu_colors_in_front:
-                    bgl.glDepthRange(1, 0)
-
-                GPU_FRAMES[obj.name][item].draw(SHADER)
-                bgl.glDisable(bgl.GL_BLEND)
-                bgl.glDisable(bgl.GL_CULL_FACE)
-                bgl.glDisable(bgl.GL_DEPTH_TEST)
+                self.batch_draw(GPU_FRAMES[obj.name][item], 'ONION')
 
     def finish(self, context):
         self.remove_handlers(context)
@@ -4344,17 +4372,31 @@ def unregister():
         pass
     try:
         bpy.app.handlers.depsgraph_update_post.remove(m_os_post_dpgraph_update)
+    except ValueError:
+        pass
+    try:
         bpy.app.handlers.save_pre.remove(m_os_pre_save)
+    except ValueError:
+        pass
+    try:
         bpy.app.handlers.frame_change_post.remove(m_os_post_frames_handler)
+    except ValueError:
+        pass
+    try:
         bpy.app.handlers.render_pre.remove(m_os_pre_render_handler)
+    except ValueError:
+        pass
+    try:
         bpy.app.handlers.render_post.remove(m_os_post_render_handler)
+    except ValueError:
+        pass
+    try:
         bpy.app.handlers.render_cancel.remove(m_os_cancel_render_handler)
     except ValueError:
         pass
 
     for panel in panels:
         bpy.utils.unregister_class(panel)
-
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
