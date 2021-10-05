@@ -29,15 +29,20 @@ Supported Blender version: **2.83+**
 
 ![FramesKeyframes_lin|690x436](images/FramesKeyframes_lin.png)
 
-**Support the Developer**
-
-You can support me here https://gumroad.com/l/OqkKG, Thanks!
-
 ![OptionsColors_lin|690x485](images/OptionsColors_lin.png) 
 
 ![SelectionVisibility_lin|690x486](images/SelectionVisibility_lin.png)
 
 **CHANGE LOG**
+
+**Mesh Onion Skins 1.1.2**
+
+- New feature Settings Presets, helps you to quickly save and load predefined properties that suits best to a particular phase in the creation or analysis of the animation.
+- New feature Auto Update Skins, that updating onion skins on changing keyframe or animation. It triggers after insert, delete or change keyframe, switching active bone if the corresponding keyframe filter is enabled, 
+basically if there is any difference in the current action of the object. Also, to reduce updating time, this feature has some properties, that allows you to fine tune the amount of frames to be updated.
+- Some small fixes :)
+
+![112](images/new_features112.png)
 
 **Mesh Onion Skins 1.1.0**
 
@@ -57,3 +62,6 @@ This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a sl
 - Added support of Sculpt mode, that can be used with the Keymesh add-on. Only Solid Viewport Shading is working with the GPU draw in that mode. Please, use the latest version of Keymesh add-on located on the page of the developer https://github.com/pablodp606/keymesh-addon
 (Blender 2.92+ is strongly recommended)
 
+**Support the Developer**
+
+You can support me here https://gumroad.com/l/OqkKG, Thanks!
