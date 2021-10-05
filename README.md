@@ -38,7 +38,7 @@ Supported Blender version: **2.83+**
 **Mesh Onion Skins 1.1.2**
 
 - New feature Settings Presets, helps you to quickly save and load predefined properties that suits best to a particular phase in the creation or analysis of the animation.
-- New feature Auto Update Skins, that updating onion skins on changing keyframe or animation. It triggers after insert, delete or change keyframe, switching active bone if the corresponding keyframe filter is enabled, 
+- New feature Auto Update Skins, that updates onion skins on changing keyframe or animation. It triggers after insert, delete or change keyframe, switching active bone if the corresponding keyframe filter is enabled, 
 basically if there is any difference in the current action of the object. Also, to reduce updating time, this feature has some properties, that allows you to fine tune the amount of frames to be updated.
 - Some small fixes :)
 
