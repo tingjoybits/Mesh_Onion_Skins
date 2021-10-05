@@ -598,6 +598,8 @@ def move_preset_file_after_install():
     move_to_path = os.path.join(presets_path, file_name)
     if os.path.isfile(preset_file_path):
         import shutil
+        if not os.path.isdir(presets_path):
+            os.mkdir(presets_path, mode=0o777)
         shutil.move(preset_file_path, move_to_path)
 
 
