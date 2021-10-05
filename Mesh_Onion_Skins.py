@@ -25,6 +25,7 @@ import gpu
 if bpy.app.version < (3, 0, 0):
     import bgl
 import numpy as np
+from bpy.app.handlers import persistent
 from bpy.props import *
 from bpy.types import Menu, Panel, AddonPreferences, Operator
 from gpu_extras.batch import batch_for_shader
@@ -33,7 +34,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 1, 0),
+    'version': (1, 1, 2),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -308,6 +309,8 @@ def update_os_prop_toggle_selectable(self, context):
 
 
 def update_view_range(self, context):
+    if not handler_check(bpy.app.handlers.frame_change_post, "m_os_post_frames_handler"):
+        bpy.app.handlers.frame_change_post.append(m_os_post_frames_handler)
     if self.view_range:
         view_range_frames(context.scene)
         return None
@@ -337,6 +340,16 @@ def update_view_range_frame_type(self, context):
     if not self.os_draw_mode == 'MESH':
         return None
     view_range_frames(context.scene)
+
+
+def update_auto_update_view(self, context):
+    if self.auto_update_view_range and self.auto_update_single_frame:
+        self.auto_update_single_frame = False
+
+
+def update_auto_update_single(self, context):
+    if self.auto_update_single_frame and self.auto_update_view_range:
+        self.auto_update_view_range = False
 
 
 def NoKeysError(self, context):
@@ -577,6 +590,30 @@ def check_handlers():
         bpy.app.handlers.render_cancel.append(m_os_cancel_render_handler)
 
 
+def move_preset_file_after_install():
+    module_path = os.path.dirname(__file__)
+    presets_path = os.path.join(get_config_path(), "presets")
+    file_name = 'All Keyframes View 2.json'
+    preset_file_path = os.path.join(module_path, file_name)
+    move_to_path = os.path.join(presets_path, file_name)
+    if os.path.isfile(preset_file_path):
+        import shutil
+        shutil.move(preset_file_path, move_to_path)
+
+
+def set_shading_color_type():
+    if not hasattr(bpy.context.space_data, 'shading'):
+        return None
+    params = bpy.context.window_manager.onionSkinsParams
+    shading = bpy.context.space_data.shading
+    if shading.color_type != 'MATERIAL' and\
+            shading.color_type != 'TEXTURE' and\
+            shading.color_type != 'OBJECT':
+        params.color_type = 'MATERIAL'
+    else:
+        params.color_type = shading.color_type
+
+
 def OS_Initialization():
     params = bpy.context.window_manager.onionSkinsParams
     if params.onion_skins_init:
@@ -597,22 +634,13 @@ def OS_Initialization():
     if prefs.display_progress:
         params.display_progress = True
 
-    shading = bpy.context.space_data.shading
-    if shading.color_type != 'MATERIAL' and shading.color_type != 'TEXTURE' and \
-            shading.color_type != 'OBJECT':
-        params.color_type = 'MATERIAL'
-    if shading.color_type == 'MATERIAL':
-        params.color_type = 'MATERIAL'
-    if shading.color_type == 'TEXTURE':
-        params.color_type = 'TEXTURE'
-    if shading.color_type == 'OBJECT':
-        params.color_type = 'OBJECT'
-
+    set_shading_color_type()
     load_os_list_settings()
     item_ob = get_active_index_obj(bpy.context)
     if item_ob:
         params.active_obj_index_list_name = item_ob.name
 
+    move_preset_file_after_install()
     params.onion_skins_init = True
 
 
@@ -629,33 +657,6 @@ def poll_check(context):
             context.active_object.type == 'ARMATURE':
         return True
     return False
-
-
-def check_draw_gpu_toggle(scene):
-    global Active_Object
-    if Active_Object != bpy.context.active_object:
-        sc = scene.onion_skins_scene_props
-        global DRAW_TOGGLE
-        if sc.draw_gpu_toggle:
-            DRAW_TOGGLE = True
-        else:
-            DRAW_TOGGLE = False
-    else:
-        return None
-    if poll_check(bpy.context):
-        Active_Object = bpy.context.active_object
-    else:
-        return None
-    if not hasattr(Active_Object, 'is_onionsk') and\
-            not hasattr(Active_Object, 'is_os_marker'):
-        return None
-    if Active_Object.is_onionsk or Active_Object.is_os_marker:
-        if sc.onionsk_tmarker:
-            sc.onionsk_tmarker = False
-            sc.onionsk_tmarker = True
-        remove_handlers(bpy.context)
-        if DRAW_TOGGLE and sc.os_draw_mode == 'GPU':
-            sc.draw_gpu_toggle = True
 
 
 class OS_PT_UI_Panel(Panel):
@@ -687,7 +688,12 @@ class OS_PT_UI_Panel(Panel):
         if not actions:
             return None
         row = layout.row(align=True)
+        row.prop(params, 'auto_update_skins_toggle', text='', icon='DISC')
+        row.popover("POPOVER_PT_auto_update", text='', icon='DOWNARROW_HLT')
+        row.separator()
         row.prop(sc, 'os_draw_mode', text='')
+        row.separator()
+        row.popover("POPOVER_PT_settings_presets", text='', icon='PRESET')
         row.operator('mos_op.show_pref_settings', text='', icon='PREFERENCES')
         row = layout.row(align=True)
         row.scale_y = 1.2
@@ -1121,14 +1127,9 @@ def init_os_collection():
     try:
         empty = bpy.data.objects[OS_empty_name]
     except KeyError:
-        bpy.ops.view3d.snap_cursor_to_center()
         coll = bpy.data.collections.new(name=OS_collection_name)
         bpy.context.scene.collection.children.link(coll)
-        bpy.ops.object.add(type="EMPTY")
-        empty = bpy.context.selected_objects[0]
-        empty.name = OS_empty_name
-        parent_collection = empty.users_collection[0]
-        parent_collection.objects.unlink(empty)
+        empty = bpy.data.objects.new(OS_empty_name, None)
         coll.objects.link(empty)
         empty.hide_set(True)
         empty.hide_render = 1
@@ -1148,15 +1149,10 @@ def create_skins_empty(obj, skin_type):
     except KeyError:
         if not bpy.context.view_layer.layer_collection.children[OS_collection_name].is_visible:
             return None
-        bpy.ops.view3d.snap_cursor_to_center()
-        bpy.ops.object.add(type="EMPTY")
-        e = bpy.context.selected_objects[0]
-        e.name = empty_name
+        e = bpy.data.objects.new(empty_name, None)
         e.select_set(False)
         # make the EMPTY a child of the main empty
         e.parent = bpy.data.objects[OS_empty_name]
-        parent_collection = e.users_collection[0]
-        parent_collection.objects.unlink(e)
         bpy.data.collections[OS_collection_name].objects.link(e)
         try:
             e.hide_set(True)
@@ -1425,7 +1421,7 @@ def fade_onion_colors(sk_names, skin_prefix, mat_color, count, view_range=False)
     sc = bpy.context.scene.onion_skins_scene_props
     sort_sk_names = [list_to_str(n.split('_')[1:-1], '_') for n in sk_names]
     sort_sk_names = list(set(sort_sk_names))
-    frame_numbers = [int(f.split('_')[-1]) for f in sk_names]
+    frame_numbers = [int(float(f.split('_')[-1])) for f in sk_names]
     frame_numbers = list(set(frame_numbers))
     frame_numbers.sort()
     for fn in frame_numbers:
@@ -1935,12 +1931,23 @@ class Progress_Status(object):
 def remove_handlers(context):
     sc = bpy.context.scene.onion_skins_scene_props
     global Draw_Handler
-    sc.draw_gpu_toggle = False
-    if Draw_Timer is not None:
-        context.window_manager.event_timer_remove(Draw_Timer)
+    global Draw_Timer
     if Draw_Handler is not None:
         bpy.types.SpaceView3D.draw_handler_remove(Draw_Handler, 'WINDOW')
+    if Draw_Timer is not None:
+        context.window_manager.event_timer_remove(Draw_Timer)
+    sc.draw_gpu_toggle = False
     Draw_Handler = None
+    Draw_Timer = None
+
+
+def create_handlers(self, context):
+    global Draw_Handler
+    global Draw_Timer
+    Draw_Timer = context.window_manager.event_timer_add(0.1, window=context.window)
+    Draw_Handler = bpy.types.SpaceView3D.draw_handler_add(
+        self.draw_gpu_frames, (context,), 'WINDOW', 'POST_VIEW'
+    )
 
 
 class GPU_OT_Draw_Skins(Operator):
@@ -1956,17 +1963,17 @@ class GPU_OT_Draw_Skins(Operator):
         self.after = None
 
     def invoke(self, context, event):
-        global Draw_Handler
-        global Draw_Timer
         if self.sc.os_draw_mode != 'GPU':
             return {'CANCELLED'}
-        Draw_Timer = context.window_manager.event_timer_add(0.1, window=context.window)
-        Draw_Handler = bpy.types.SpaceView3D.draw_handler_add(self.draw_gpu_frames, (context,), 'WINDOW', 'POST_VIEW')
+        create_handlers(self, context)
         context.window_manager.modal_handler_add(self)
         obj = checkout_parent(context.active_object)
+
         if not GPU_FRAMES.get(obj.name):
             return {'RUNNING_MODAL'}
-        self.frames_count = list(set([(int(float(f.split('|@|')[-1])), i) for i, f in enumerate(GPU_FRAMES[obj.name])]))
+        self.frames_count = list(set(
+            [(int(float(f.split('|@|')[-1])), i) for i, f in enumerate(GPU_FRAMES[obj.name])]
+        ))
         self.frames_count.sort()
         self.frames_count = dict(self.frames_count)
         return {'RUNNING_MODAL'}
@@ -2066,6 +2073,11 @@ class GPU_OT_Draw_Skins(Operator):
                 gpu.state.depth_mask_set(False)
 
     def draw_gpu_frames(self, context):
+        try:
+            if not hasattr(self, 'sc'): pass
+        except ReferenceError:
+            remove_handlers(context)
+            return None
         if not context.active_object or not context.space_data.overlay.show_overlays:
             return None
         curframe = context.scene.frame_current
@@ -2082,7 +2094,6 @@ class GPU_OT_Draw_Skins(Operator):
             SHADER.uniform_float("color", color)
             for i, item in enumerate(GPU_MARKERS[obj.name]):
                 self.batch_draw(GPU_MARKERS[obj.name][item], 'MARKER')
-
         if not GPU_FRAMES.get(obj.name):
             return None
         for item in GPU_FRAMES[obj.name]:
@@ -2121,12 +2132,11 @@ class GPU_OT_Draw_Skins(Operator):
                 SHADER.uniform_float("color", color)
                 self.batch_draw(GPU_FRAMES[obj.name][item], 'ONION')
 
-    def finish(self, context):
-        self.remove_handlers(context)
-        return {'FINISHED'}
-
 
 class Onion_Skins:
+
+    keys_updated = {}
+    keys_changed = []
 
     def __init__(self, obj=None, empty=None, cls=None):
         self.sc = bpy.context.scene.onion_skins_scene_props
@@ -2207,7 +2217,9 @@ class Onion_Skins:
             return FramesBf + FramesAf
         return fs, fe
 
-    def get_keyframes(self, action):
+    def get_keyframes(self, action, full_keys=False):
+        if not action:
+            action = self.obj.animation_data.action
         all_keys = []
         for fcurve in action.fcurves:
             keys = fcurve.keyframe_points
@@ -2221,7 +2233,12 @@ class Onion_Skins:
                     key_skip = run_filter_keyframes(key)
                     if key_skip:
                         continue
-                all_keys.append(key.co[0])
+                if full_keys:
+                    all_keys.append((key.co[0], key.co[1]))
+                else:
+                    all_keys.append(key.co[0])
+        if full_keys:
+            return all_keys
         all_keys = list(set(all_keys))
         all_keys.sort()
         kfbefore = [key for key in all_keys if key < self.curframe]
@@ -2375,10 +2392,6 @@ class Onion_Skins:
     def make_frame(self, Frame):
         bpy.context.scene.frame_set(Frame)
         print("Onion Skin: Frame " + str(Frame))
-        # CREATE TIMELINE'S MARKER AT THAT FRAME
-        if self.sc.onionsk_tmarker is True:
-            tmarkers = bpy.context.scene.timeline_markers
-            tmarkers.new("os", frame=Frame)
         if self.sc.os_draw_mode == 'MESH':
             count = make_onionSkin_frame(self, self.objp, self.empty, self.curframe, Frame)
         if self.sc.os_draw_mode == 'GPU':
@@ -2409,6 +2422,7 @@ class OS_OT_CreateUpdate_Skins(Operator):
         self.OSkins = None
         self.Frames = []
         self.Skins_count = 0
+        self.keys_changed = Onion_Skins.keys_changed
 
     def modal(self, context, event):
         if event.type in {'ESC'}:  # 'RIGHTMOUSE',
@@ -2416,6 +2430,8 @@ class OS_OT_CreateUpdate_Skins(Operator):
             self.stop_early = True
             self.th.join()
             self.Skins_count = self.OSkins.Skins_count
+            if self.params.auto_update_skins_toggle:
+                self.auto_update_count()
             self.finishing(context)
             print('CANCELLED')
 
@@ -2427,14 +2443,100 @@ class OS_OT_CreateUpdate_Skins(Operator):
                 print(str(int(self.prog)) + '%')
                 self.processing = False
 
-            if not self.th.isAlive():
+            if bpy.app.version < (2, 9, 3):
+                is_alive = self.th.isAlive()
+            else:
+                is_alive = self.th.is_alive()
+            if not is_alive:
                 self.th.join()
                 self.Skins_count = self.OSkins.Skins_count
+                if self.params.auto_update_skins_toggle:
+                    self.auto_update_count()
                 self.finishing(context)
                 # print('DONE')
                 return {'FINISHED'}
 
         return {'PASS_THROUGH'}
+
+    def get_update_frames(self):
+        sc = bpy.context.scene.onion_skins_scene_props
+        update_Frames = []
+        kfbefore, kfafter, all_keys = self.OSkins.get_keyframes(None)
+        if sc.auto_update_single_frame:
+            if float(self.curframe) in all_keys:
+                return update_Frames + [float(self.curframe)]
+            else:
+                return []
+        if sc.auto_update_view_range:
+            before = sc.view_before
+            after = sc.view_after
+        else:
+            before = sc.auto_update_before
+            after = sc.auto_update_after
+        if kfbefore:
+            if len(kfbefore) >= before:
+                update_Frames = kfbefore[-before:]
+            else:
+                update_Frames = kfbefore
+        if float(self.curframe) in all_keys:
+            update_Frames += [float(self.curframe)]
+        if kfafter:
+            if len(kfafter) >= after:
+                update_Frames += kfafter[0:after]
+            else:
+                update_Frames += kfafter
+        return update_Frames
+
+    def set_auto_update_frames(self, created_frames):
+        sc = bpy.context.scene.onion_skins_scene_props
+        if sc.auto_update_complete:
+            return None
+        update_Frames = self.get_update_frames()
+        if update_Frames:
+            self.Frames = [
+                frame for frame in self.OSkins.Frames
+                if frame >= update_Frames[0] and frame <= update_Frames[-1] or frame not in created_frames
+            ]
+        else:
+            self.Frames = []
+        self.Frames += [fr for fr in self.keys_changed if fr not in self.Frames]
+        Onion_Skins.keys_changed.clear()
+
+    def gpu_auto_update_frames(self):
+        objp = self.objp
+        global GPU_FRAMES
+        created_frames = [float(item.split('|@|')[-1]) for item in GPU_FRAMES[objp.name]]
+        self.set_auto_update_frames(created_frames)
+        remove_items = []
+        for item in GPU_FRAMES[objp.name]:
+            item_frame = float(item.split('|@|')[-1])
+            if item_frame not in self.OSkins.Frames or\
+                    item_frame in self.Frames:
+                remove_items.append(item)
+        for i in remove_items:
+            GPU_FRAMES[objp.name].pop(i)
+
+    def mesh_auto_update_frames(self):
+        tree = get_empty_objs_tree()
+        if not tree:
+            return None
+        created_frames = [float(s.name.split('_')[-1]) for s in tree.children]
+        self.set_auto_update_frames(created_frames)
+        remove_items = []
+        for s in tree.children:
+            item_frame = float(s.name.split('_')[-1])
+            if item_frame < self.curframe:
+                s.name = '_'.join(['before'] + s.name.split('_')[1:])
+            else:
+                s.name = '_'.join(['after'] + s.name.split('_')[1:])
+            if item_frame not in self.OSkins.Frames or\
+                    item_frame in self.Frames:
+                remove_items.append(s)
+        for x in remove_items:
+            mesh = x.data
+            bpy.data.objects.remove(x, do_unlink=True)
+            if bpy.data.meshes[mesh.name].users == 0:
+                bpy.data.meshes.remove(mesh)
 
     def execute(self, context):
 
@@ -2442,6 +2544,7 @@ class OS_OT_CreateUpdate_Skins(Operator):
         params = bpy.context.window_manager.onionSkinsParams
         prefs = bpy.context.preferences.addons[__name__].preferences
         self.mode = context.mode
+        self.curframe = context.scene.frame_current
         obj = self.obj
         # Check object is a parent or a child
         objp = self.objp
@@ -2468,11 +2571,11 @@ class OS_OT_CreateUpdate_Skins(Operator):
 
         bpy.data.objects.update()
 
-        remove_skins(obj)
         remove_handlers(context)
-        global GPU_FRAMES
-        if GPU_FRAMES.get(objp.name):
-            GPU_FRAMES[objp.name].clear()
+        if not params.auto_update_skins_toggle:
+            remove_skins(obj)
+            if GPU_FRAMES.get(objp.name):
+                GPU_FRAMES[objp.name].clear()
 
         #!!!!!!!!!!!!!!SET TO CONTEXT OBJECT MODE !!!!!!!!!!!!!!!!!
         #Store current mode to return to it after complete operations
@@ -2492,7 +2595,6 @@ class OS_OT_CreateUpdate_Skins(Operator):
         create_skins_materials()
 
         obj.select_set(False)
-        self.curframe = context.scene.frame_current
 
         import threading
 
@@ -2522,8 +2624,14 @@ class OS_OT_CreateUpdate_Skins(Operator):
         self.th = threading.Thread(target=long_task, args=(self, context))
 
         if sc.os_draw_mode == 'GPU':
-            GPU_FRAMES[objp.name] = {}
+            if not GPU_FRAMES.get(objp.name):
+                GPU_FRAMES[objp.name] = {}
             params.display_progress = False
+            if params.auto_update_skins_toggle and obj.is_onionsk:
+                self.gpu_auto_update_frames()
+        if sc.os_draw_mode == 'MESH':
+            if params.auto_update_skins_toggle and obj.is_onionsk:
+                self.mesh_auto_update_frames()
 
         if params.display_progress:
             Progress_Status.show(self, context)
@@ -2536,9 +2644,23 @@ class OS_OT_CreateUpdate_Skins(Operator):
             for Frame in self.Frames:
                 self.OSkins.make_frame(Frame)
             self.Skins_count = self.OSkins.Skins_count
+            if params.auto_update_skins_toggle:
+                self.auto_update_count()
             print("Onion Skin: Done")
-
             return self.finishing(context)
+
+    def auto_update_count(self):
+        if not self.Frames and self.obj.is_onionsk:
+            self.Skins_count = self.objp.onionsk_Skins_count
+            self.Frames = self.OSkins.Frames
+        else:
+            frame_skins = self.OSkins.Skins_count / len(self.Frames)
+            self.Skins_count = frame_skins * len(self.OSkins.Frames)
+        if not self.obj.is_onionsk or\
+                not Onion_Skins.keys_updated.get(self.obj.name):
+            action = self.obj.animation_data.action
+            keys = self.OSkins.get_keyframes(action, full_keys=True)
+            Onion_Skins.keys_updated[self.obj.name] = keys
 
     def finishing(self, context):
         sc = bpy.context.scene.onion_skins_scene_props
@@ -2552,13 +2674,16 @@ class OS_OT_CreateUpdate_Skins(Operator):
         objp.onionsk_Skins_count = self.Skins_count
         obj.select_set(True)
         context.view_layer.objects.active = obj
-        if self.Frames:
+        if self.Frames and self.OSkins:
             # Object custom property of using Onion Skins
             obj.is_onionsk = True
             objp.is_onionsk = True
             set_onion_colors('BEFORE')
             set_onion_colors('AFTER')
-
+            # Turn off view_range, otherwise it slows down motion path creation
+            is_view_range = sc.view_range
+            if is_view_range and sc.os_draw_mode == 'MESH':
+                sc.view_range = False
             # CREATE MOTION PATH
             if sc.onionsk_mpath is True:
                 if sc.onionsk_method == 'FRAME' or sc.onionsk_method == 'SCENE':
@@ -2569,6 +2694,14 @@ class OS_OT_CreateUpdate_Skins(Operator):
                     create_update_motion_path(
                         context, mode, obj, 0, 0,
                         self.OSkins.kfbefore, self.OSkins.kfafter)
+            if is_view_range and sc.os_draw_mode == 'MESH':
+                sc.view_range = is_view_range
+
+        # CREATE TIMELINE'S MARKER AT FRAME
+        if self.sc.onionsk_tmarker and self.OSkins:
+            for Frame in self.OSkins.Frames:
+                tmarkers = bpy.context.scene.timeline_markers
+                tmarkers.new("os", frame=Frame)
 
         bpy.data.objects.update()
         bpy.data.scenes.update()
@@ -2591,13 +2724,13 @@ class OS_OT_CreateUpdate_Skins(Operator):
             params.mesh_inFront = True
         else:
             params.mesh_inFront = False
+
+        if sc.os_draw_mode == 'GPU' and not sc.draw_gpu_toggle:
+            sc.draw_gpu_toggle = True
         global CREATING
         CREATING = False
         if sc.view_range:
             view_range_frames(context.scene)
-
-        if sc.os_draw_mode == 'GPU' and not sc.draw_gpu_toggle:
-            sc.draw_gpu_toggle = True
 
         if not params.display_progress and self.empty:
             msg = "Mesh Onion Skins Updated"
@@ -2609,8 +2742,6 @@ class OS_OT_CreateUpdate_Skins(Operator):
         wm = context.window_manager
         wm.event_timer_remove(self._timer)
         Progress_Status.hide(self)
-
-##############################################################################
 
 
 class OS_OT_Remove_Skins(Operator):
@@ -2655,8 +2786,6 @@ class OS_OT_Remove_Skins(Operator):
         # self.report({'INFO'}, msg)
 
         return {'FINISHED'}
-
-###############################################
 
 
 class OS_OT_Add_Marker(Operator):
@@ -2746,8 +2875,6 @@ class OS_OT_Add_Marker(Operator):
             self.report({'INFO'}, msg)
 
         return {'FINISHED'}
-
-##############################################################################
 
 
 class OS_OT_Remove_Marker(Operator):
@@ -2916,7 +3043,6 @@ def create_data_list(object_data_list, item_list, list_type='new'):
                 item.flag = False
     if list_type == 'new':
         selected_os_set = get_selected_os_set()
-        obj = checkout_parent(bpy.context.active_object)
         OS_Selected_Object_Sets[selected_os_set] = obj_list
     os_obj_switching = False
 
@@ -3130,6 +3256,11 @@ class OBJECT_list_settings(bpy.types.PropertyGroup):
     list_type: bpy.props.StringProperty(name="list type")
     show_parent_coll: BoolProperty(name="show parent collection", default=False)
     collection: bpy.props.StringProperty(name="collection")
+
+
+class OBJECT_active_list_types(bpy.types.PropertyGroup):
+    name: bpy.props.StringProperty(name="object name")
+    active_list_type: bpy.props.StringProperty(name="list type")
 
 
 class WM_OT_list_uncheck_all(Operator):
@@ -3365,6 +3496,34 @@ class OnionSkins_Scene_Props(bpy.types.PropertyGroup):
         description='View frames after current frame',
         min=0, soft_min=0, max=10000, soft_max=10000, default=5,
         update=update_view_range)
+
+    auto_update_before: IntProperty(
+        name="Before",
+        description='Set keyframe range before current frame, that being used by auto update onion skins',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=2)
+
+    auto_update_after: IntProperty(
+        name="After",
+        description='Set keyframe range after current frame, that being used by auto update onion skins',
+        min=0, soft_min=0, max=10000, soft_max=10000, default=2)
+
+    auto_update_single_frame: BoolProperty(
+        name='Single Frame',
+        description='The auto update gonna use a single current frame only',
+        default=False,
+        update=update_auto_update_single)
+
+    auto_update_view_range: BoolProperty(
+        name='Use View Range',
+        description='The auto update gonna use a view range keyframes',
+        default=False,
+        update=update_auto_update_view)
+
+    auto_update_complete: BoolProperty(
+        name='Complete',
+        description='The auto update gonna use a completely defined range of frames',
+        default=False,)
+        # update=update_auto_update_view)
 
     onionsk_frame_step: IntProperty(
         attr="onionsk_frame_step",
@@ -3660,6 +3819,15 @@ class OnionSkinsParams(bpy.types.PropertyGroup):
         description="Show progress in the window UI while creating onion skins ( creating is slower if turned on )",
         default=False)
 
+    settings_preset_new_name: StringProperty(
+        name="Name",
+        default="New Preset"
+    )
+    auto_update_skins_toggle: BoolProperty(
+        name="Auto Update Skins",
+        description="Update skins automatically on change or inserting a new keyframe",
+        default=False)
+
 
 def update_pref_color_alpha(self, context):
     if not self.color_alpha:
@@ -3724,25 +3892,26 @@ class Onion_Skins_Preferences(AddonPreferences):
     color_alpha: BoolProperty(
         name="Alpha",
         description="Color alpha",
-        default=True, update=update_pref_color_alpha)
+        default=True,)
+        # update=update_pref_color_alpha)
 
     color_alpha_value: FloatProperty(
         attr="color_alpha_value",
         name="Alpha",
         description='Color alpha value',
         step=5,
-        min=0.0, soft_min=0, max=1, soft_max=1, default=0.3,
-        update=update_pref_color_alpha_value)
+        min=0.0, soft_min=0, max=1, soft_max=1, default=0.3,)
+        # update=update_pref_color_alpha_value)
 
     display_progress: BoolProperty(
         name="Display Progress",
         description="Draw Technic: Mesh: Show progress in the window UI while creating onion skins ( creating is slower while turned on )",
-        default=True)
+        default=False)
 
     onionsk_tmarker: BoolProperty(
         name='Time Markers',
         description='Create time markers at frames',
-        default=True)
+        default=False)
 
     onionsk_mpath: BoolProperty(
         name='Motion Path',
@@ -3810,15 +3979,15 @@ class Onion_Skins_Preferences(AddonPreferences):
         attr="view_before",
         name="Backward",
         description='View frames before current frame',
-        min=0, soft_min=0, max=10000, soft_max=10000, default=5,
-        update=update_view_range)
+        min=0, soft_min=0, max=10000, soft_max=10000, default=2,)
+        # update=update_view_range)
 
     view_after: IntProperty(
         attr="view_after",
         name="Forward",
         description='View frames after current frame',
-        min=0, soft_min=0, max=10000, soft_max=10000, default=5,
-        update=update_view_range)
+        min=0, soft_min=0, max=10000, soft_max=10000, default=2,)
+        # update=update_view_range)
 
     onionsk_frame_step: IntProperty(
         attr="onionsk_frame_step",
@@ -3830,12 +3999,14 @@ class Onion_Skins_Preferences(AddonPreferences):
         attr="onionsk_fr_sc",
         name='Playback range',
         description='Use Start/End playback frames',
-        default=False, update=update_in_range_playback)
+        default=False,)
+        # update=update_in_range_playback)
 
     onionsk_action_range: BoolProperty(
         name='Action range',
         description='Use the current animation range',
-        default=False, update=update_in_range_action)
+        default=False,)
+        # update=update_in_range_action)
 
     onionsk_skip: IntProperty(
         attr="onionsk_skip",
@@ -3846,7 +4017,7 @@ class Onion_Skins_Preferences(AddonPreferences):
     use_all_keyframes: BoolProperty(
         name='All Keyframes',
         description='Use all keyframes of the current action to create onion skin at each of them',
-        default=False)
+        default=True)
 
     view_range_frame_type: EnumProperty(
         name="View Frame Type", items=[
@@ -3981,6 +4152,175 @@ class WM_OT_Show_Preferences(Operator):
         return {'FINISHED'}
 
 
+def get_config_path():
+    user_path = bpy.utils.resource_path('USER')
+    config_path = os.path.join(user_path, "config")
+    config_path = os.path.join(config_path, "mesh_onion_skins")
+    if not os.path.isdir(config_path):
+        os.mkdir(config_path, mode=0o777)
+    return config_path
+
+
+def get_file_list_names(path, extension='.json'):
+    file_names = []
+    for file in os.listdir(path):
+        if os.path.isfile(os.path.join(path, file)) and\
+                file.lower().endswith(extension):
+            name = file.split(extension)[0]
+            file_names.append(name)
+    return file_names
+
+
+def settings_preset_names(context):
+    presets_path = os.path.join(get_config_path(), "presets")
+    if not os.path.isdir(presets_path):
+        os.mkdir(presets_path, mode=0o777)
+    return get_file_list_names(presets_path)
+
+
+def save_settings_to_file(source, file_path, skip_list=[]):
+    pref_data = {}
+    for pr in source.__annotations__:
+        if pr in skip_list:
+            continue
+        value = eval("source." + pr)
+        if type(value).__name__ == 'bpy_prop_array':
+            pref_data[pr] = [v for v in value]
+        else:
+            pref_data[pr] = value
+
+    with open(file_path, 'w', encoding='utf-8') as f:
+        json.dump(pref_data, f, ensure_ascii=False, indent=4)
+
+
+def load_settings_from_file(load_to, file_path):
+    f = open(file_path)
+    pref_data = json.load(f)
+    for pr in pref_data:
+        value = pref_data.get(pr)
+        exec("if hasattr(load_to, pr): load_to." + pr + " = value")
+    f.close()
+
+
+class PREF_OT_Save_Settings_Preset(Operator):
+    bl_label = 'Save Settings Preset'
+    bl_idname = 'mos_op.save_settings_preset'
+    bl_description = "Save settings preset to a .json file"
+
+    name: bpy.props.StringProperty(name="Name")
+
+    def execute(self, context):
+        sc = bpy.context.scene.onion_skins_scene_props
+        presets_path = os.path.join(get_config_path(), "presets")
+        file_name = self.name + '.json'
+        file_path = os.path.join(presets_path, file_name)
+        skip = [
+            'os_draw_mode',
+            'draw_gpu_toggle',
+            'selection_sets',
+            'show_parent_users_collection',
+        ]
+        save_settings_to_file(sc, file_path, skip_list=skip)
+
+        msg = "Mesh Onion Skins: The preset has been saved to " + file_path
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class PREF_OT_Load_Settings_Preset(Operator):
+    bl_label = 'Load Settings Preset'
+    bl_idname = 'mos_op.load_settings_preset'
+    bl_description = "Load settings preset from saved .json file"
+
+    name: bpy.props.StringProperty(name="Name")
+
+    def execute(self, context):
+        sc = bpy.context.scene.onion_skins_scene_props
+        presets_path = os.path.join(get_config_path(), "presets")
+        file_name = self.name + '.json'
+        file_path = os.path.join(presets_path, file_name)
+        if not os.path.isfile(file_path):
+            msg = "Mesh Onion Skins: The preset file '" + self.name + "' does not exist"
+            self.report({'ERROR'}, msg)
+            return {'FINISHED'}
+        load_settings_from_file(sc, file_path)
+
+        msg = "Mesh Onion Skins: The preset has been loaded from " + file_path
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class PREF_OT_Remove_Settings_Preset(Operator):
+    bl_label = 'Remove Settings Preset'
+    bl_idname = 'mos_op.remove_settings_preset'
+    bl_description = "Remove settings preset and saved .json file"
+
+    name: bpy.props.StringProperty(name="Name")
+
+    def execute(self, context):
+        presets_path = os.path.join(get_config_path(), "presets")
+        file_name = self.name + '.json'
+        file_path = os.path.join(presets_path, file_name)
+        if not os.path.isfile(file_path):
+            msg = "Mesh Onion Skins: The preset file '" + self.name + "' does not exist"
+            self.report({'ERROR'}, msg)
+            return {'FINISHED'}
+        os.remove(file_path)
+
+        msg = "Mesh Onion Skins: The preset file '" + file_name + "' has been removed"
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class POPOVER_PT_Settings_Presets(Panel):
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'HEADER'
+    bl_label = "Settings Presets"
+    bl_idname = "POPOVER_PT_settings_presets"
+
+    def draw(self, context):
+        params = context.window_manager.onionSkinsParams
+        layout = self.layout
+        layout.emboss = 'PULLDOWN_MENU'
+        preset_names = settings_preset_names(context)
+        for name in preset_names:
+            row = layout.row(align=True)
+            row.operator('mos_op.load_settings_preset', text=name).name = name
+            row.operator('mos_op.remove_settings_preset', text='', icon='REMOVE').name = name
+        row = layout.row(align=False)
+        row.emboss = 'NORMAL'
+        row.prop(params, "settings_preset_new_name", text='')
+        sub_row = row.row(align=False)
+        sub_row.emboss = 'PULLDOWN_MENU'
+        op = sub_row.operator('mos_op.save_settings_preset', text='', icon='ADD')
+        op.name = params.settings_preset_new_name
+
+
+class POPOVER_PT_Auto_Update(Panel):
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'HEADER'
+    bl_label = "Auto Update Properties"
+    bl_idname = "POPOVER_PT_auto_update"
+
+    def draw(self, context):
+        # params = context.window_manager.onionSkinsParams
+        sc = bpy.context.scene.onion_skins_scene_props
+        layout = self.layout
+        row = layout.row(align=True)
+        row.prop(sc, "auto_update_complete", toggle=True)
+        row = layout.row(align=True)
+        row.enabled = not sc.auto_update_complete
+        row.prop(sc, "auto_update_single_frame", toggle=True)
+        row.prop(sc, "auto_update_view_range", toggle=True)
+        row = layout.row(align=True)
+        if sc.auto_update_single_frame or\
+                sc.auto_update_view_range or\
+                sc.auto_update_complete:
+            row.enabled = False
+        row.prop(sc, "auto_update_before")
+        row.prop(sc, "auto_update_after")
+
+
 class PREF_OT_Save_Settings(Operator):
     bl_label = 'Save Settings'
     bl_idname = 'mos_op.save_pref_settings'
@@ -3988,24 +4328,11 @@ class PREF_OT_Save_Settings(Operator):
 
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
-        user_path = bpy.utils.resource_path('USER')
-        config_path = os.path.join(user_path, "config")
-        config_path = os.path.join(config_path, "mesh_onion_skins")
-        if not os.path.isdir(config_path):
-            os.mkdir(config_path, mode=0o777)
+        config_path = get_config_path()
         json_file = os.path.join(config_path, "mesh_onion_skins_settings.json")
-        pref_data = {}
-        for pr in prefs.__annotations__:
-            if pr.startswith('mat_'):
-                array = eval("prefs." + pr)
-                pref_data[pr] = [v for v in array]
-            else:
-                pref_data[pr] = eval("prefs." + pr)
+        save_settings_to_file(prefs, json_file)
 
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(pref_data, f, ensure_ascii=False, indent=4)
-
-        msg = "Mesh Onion Skins: Settings has been saved to " + json_file
+        msg = "Mesh Onion Skins: The settings has been saved to " + json_file
         self.report({'INFO'}, msg)
 
         return {'FINISHED'}
@@ -4018,22 +4345,15 @@ class PREF_OT_Load_Settings(Operator):
 
     def execute(self, context):
         prefs = context.preferences.addons[__name__].preferences
-        user_path = bpy.utils.resource_path('USER')
-        config_path = os.path.join(user_path, "config")
-        config_path = os.path.join(config_path, "mesh_onion_skins")
+        config_path = get_config_path()
         json_file = os.path.join(config_path, "mesh_onion_skins_settings.json")
         if not os.path.isfile(json_file):
-            msg = "Mesh Onion Skins: The settings file does not exist or it have not been saved yet."
+            msg = "Mesh Onion Skins: The settings file does not exist or it have not been saved yet"
             self.report({'WARNING'}, msg)
             return {'FINISHED'}
-        f = open(json_file)
-        pref_data = json.load(f)
-        for pr in pref_data:
-            value = pref_data.get(pr)
-            exec("if hasattr(prefs, pr): prefs." + pr + " = value")
-        f.close()
+        load_settings_from_file(prefs, json_file)
 
-        msg = "Mesh Onion Skins: Settings has been loaded from " + json_file
+        msg = "Mesh Onion Skins: The settings has been loaded from " + json_file
         self.report({'INFO'}, msg)
 
         return {'FINISHED'}
@@ -4272,16 +4592,137 @@ def m_os_cancel_render_handler(dummy):
     RENDERING = False
 
 
-def m_os_on_file_load(scene):
-    remove_handlers(bpy.context)
-    global GPU_FRAMES
-    global GPU_MARKERS
-    GPU_FRAMES.clear()
-    GPU_MARKERS.clear()
+def is_onion_skin(obj):
+    if not hasattr(obj, 'is_onionsk') and\
+            not hasattr(obj, 'is_os_marker'):
+        return None
+    if obj.is_onionsk or obj.is_os_marker:
+        return True
+    else:
+        return False
+
+
+def check_update_active():
+    if not poll_check(bpy.context):
+        return None
+    params = bpy.context.window_manager.onionSkinsParams
+    if not params.onion_skins_init:
+        return None
+    global Active_Object
+    try:
+        if not hasattr(Active_Object, 'name'):
+            Active_Object = None
+    except ReferenceError:
+        Active_Object = None
+    last_obj = Active_Object
+    if Active_Object != bpy.context.active_object:
+        Active_Object = bpy.context.active_object
+        return last_obj, True
+    else:
+        return last_obj, None
+
+
+def set_childrens_list_selection_type(scene, last_obj):
+    sc = scene.onion_skins_scene_props
+    active_list_types = scene.os_object_active_list_types
+    obj = bpy.context.active_object
+    if last_obj:
+        item_list_type = active_list_types.get(last_obj.name)
+        if item_list_type:
+            # Update last
+            item_list_type.active_list_type = sc.selection_sets
+        else:
+            # Save last
+            new_item = active_list_types.add()
+            new_item.name = last_obj.name
+            new_item.active_list_type = sc.selection_sets
+    # Apply list type
+    if active_list_types.get(obj.name):
+        sc.selection_sets = active_list_types.get(obj.name).active_list_type
+    else:
+        sc.selection_sets = "PARENT"
+
+
+def auto_update_skins(scene):
+    global CREATING
+    if CREATING:
+        return None
+    params = bpy.context.window_manager.onionSkinsParams
+    sc = bpy.context.scene.onion_skins_scene_props
+    if sc.os_draw_mode == 'GPU' and not sc.draw_gpu_toggle:
+        return None
+    if not params.auto_update_skins_toggle:
+        return None
+    if not poll_check(bpy.context):
+        return None
+    obj = bpy.context.active_object
+    if not hasattr(obj, 'is_onionsk'):
+        return None
+    if not obj.is_onionsk:
+        return None
+    action = obj.animation_data.action
+    OSkins = Onion_Skins()
+    keys = OSkins.get_keyframes(action, full_keys=True)
+    keys_upd = OSkins.keys_updated
+    keys_changed = []
+    if keys != keys_upd.get(obj.name):
+        if keys_upd.get(obj.name):
+            for i, key in enumerate(keys):
+                try:
+                    if not keys_upd.get(obj.name)[i][0]:
+                        pass
+                except IndexError:
+                    continue
+                if key[0] != keys_upd.get(obj.name)[i][0]:
+                    continue
+                if key[1] != keys_upd.get(obj.name)[i][1]:
+                    keys_changed.append(key[0])
+            keys_changed = list(set(keys_changed))
+        Onion_Skins.keys_updated[obj.name] = keys
+        Onion_Skins.keys_changed = keys_changed
+        set_object_data_collection_items()
+        bpy.ops.mos_op.make_skins()
+
+
+def check_draw_gpu_toggle(scene):
+    global Active_Object
+    sc = scene.onion_skins_scene_props
+    global DRAW_TOGGLE
+    if sc.draw_gpu_toggle:
+        DRAW_TOGGLE = True
+    else:
+        DRAW_TOGGLE = False
+    if is_onion_skin(Active_Object):
+        if sc.onionsk_tmarker:
+            sc.onionsk_tmarker = False
+            sc.onionsk_tmarker = True
+        remove_handlers(bpy.context)
+        if DRAW_TOGGLE and sc.os_draw_mode == 'GPU':
+            sc.draw_gpu_toggle = True
 
 
 def m_os_post_dpgraph_update(scene):
-    check_draw_gpu_toggle(scene)
+    last_obj, is_update = check_update_active()
+    if is_update:
+        set_childrens_list_selection_type(scene, last_obj)
+    auto_update_skins(scene)
+    if is_update:
+        check_draw_gpu_toggle(scene)
+
+
+@persistent
+def m_os_on_file_load(scene):
+    remove_handlers(bpy.context)
+    global OS_Selected_Object_Sets
+    global GPU_FRAMES
+    global GPU_MARKERS
+    global Active_Object
+    global DRAW_TOGGLE
+    OS_Selected_Object_Sets.clear()
+    GPU_FRAMES.clear()
+    GPU_MARKERS.clear()
+    Active_Object = None
+    DRAW_TOGGLE = False
 
 
 classes = [
@@ -4303,6 +4744,7 @@ classes = [
     Object_Childrens_Collection,
     OBJECT_UL_Childrens,
     OBJECT_list_settings,
+    OBJECT_active_list_types,
     WM_OT_update_childrens_list,
     WM_OT_object_list_settings_remove,
     WM_OT_list_check_all,
@@ -4317,6 +4759,11 @@ classes = [
     WM_OT_Show_Preferences,
     PREF_OT_Save_Settings,
     PREF_OT_Load_Settings,
+    POPOVER_PT_Settings_Presets,
+    PREF_OT_Save_Settings_Preset,
+    PREF_OT_Load_Settings_Preset,
+    PREF_OT_Remove_Settings_Preset,
+    POPOVER_PT_Auto_Update,
 ]
 
 
@@ -4340,6 +4787,7 @@ def register():
     wm.active_os_set = StringProperty(
         name='Active Object')
     bpy.types.Scene.os_object_list_settings = bpy.props.CollectionProperty(type=OBJECT_list_settings)
+    bpy.types.Scene.os_object_active_list_types = bpy.props.CollectionProperty(type=OBJECT_active_list_types)
 
     bpy.app.handlers.load_post.append(m_os_on_file_load)
     bpy.app.handlers.depsgraph_update_post.append(m_os_post_dpgraph_update)
@@ -4359,6 +4807,7 @@ def unregister():
     del bpy.types.WindowManager.active_os_set
     del bpy.types.Scene.onion_skins_scene_props
     del bpy.types.Scene.os_object_list_settings
+    del bpy.types.Scene.os_object_active_list_types
     global OS_Selected_Object_Sets
     try:
         OS_Selected_Object_Sets.clear()
