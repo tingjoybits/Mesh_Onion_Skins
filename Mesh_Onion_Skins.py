@@ -2912,8 +2912,12 @@ class OS_OT_Remove_Marker(Operator):
         bpy.data.objects.update()
         bpy.data.scenes.update()
 
-        msg = "Mesh Onion Markers Removed"
-        self.report({'INFO'}, msg)
+        for area in context.window.screen.areas:
+            if area.type == 'VIEW_3D':
+                area.tag_redraw()
+
+        # msg = "Mesh Onion Markers Removed"
+        # self.report({'INFO'}, msg)
 
         return {'FINISHED'}
 
