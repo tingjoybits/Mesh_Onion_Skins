@@ -4610,10 +4610,10 @@ def is_onion_skin(obj):
 
 def check_update_active():
     if not poll_check(bpy.context):
-        return None
+        return None, None
     params = bpy.context.window_manager.onionSkinsParams
     if not params.onion_skins_init:
-        return None
+        return None, None
     global Active_Object
     try:
         if not hasattr(Active_Object, 'name'):
