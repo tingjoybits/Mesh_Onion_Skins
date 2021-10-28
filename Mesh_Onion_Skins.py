@@ -38,7 +38,7 @@ bl_info = {
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
-    'wiki_url': "https://github.com/tingjoybits/Mesh_Onion_Skins",
+    'doc_url': "https://github.com/tingjoybits/Mesh_Onion_Skins",
     'category': "Animation"}
 
 
