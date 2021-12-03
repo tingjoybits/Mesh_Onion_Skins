@@ -4724,9 +4724,9 @@ def m_os_on_file_load(scene):
     global GPU_MARKERS
     global Active_Object
     global DRAW_TOGGLE
-    OS_Selected_Object_Sets.clear()
-    GPU_FRAMES.clear()
-    GPU_MARKERS.clear()
+    OS_Selected_Object_Sets = {}
+    GPU_FRAMES = {}
+    GPU_MARKERS = {}
     Active_Object = None
     DRAW_TOGGLE = False
 
