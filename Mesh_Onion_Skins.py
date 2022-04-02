@@ -1828,18 +1828,18 @@ def create_update_motion_path(context, mode, obj, fs, fe, kfbefore, kfafter):
         if (len(kfafter) - 1) < af:
             af = len(kfafter) - 1
         mp.type = 'RANGE'
-        mp.frame_start = kfbefore[0]
-        mp.frame_end = kfafter[af]
-        mp.frame_step = kfafter[af]-kfbefore[0]
-        fs = kfbefore[0]
-        fe = kfafter[af]
+        mp.frame_start = int(kfbefore[0])
+        mp.frame_end = int(kfafter[af])
+        mp.frame_step = int(kfafter[af]-kfbefore[0])
+        fs = int(kfbefore[0])
+        fe = int(kfafter[af])
         if bf < 0 or kfbefore[0] == -101010.0:  # NO BEFORE
             mp.frame_start = curframe
-            mp.frame_step = kfafter[af]-curframe
+            mp.frame_step = int(kfafter[af])-curframe
             fs = curframe
         if af < 0 or kfafter[0] == 101010.0:  # NO AFTER
             mp.frame_end = curframe
-            mp.frame_step = curframe-kfbefore[0]
+            mp.frame_step = curframe-int(kfbefore[0])
             fe = curframe
     if sc.onionsk_method == 'SCENE':
         mp.type = 'RANGE'
