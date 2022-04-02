@@ -2673,7 +2673,7 @@ class OS_OT_CreateUpdate_Skins(Operator):
         #////////////////////////////////////////////
         context.scene.frame_set(self.curframe)
         # update active Skins count
-        objp.onionsk_Skins_count = self.Skins_count
+        objp.onionsk_Skins_count = int(self.Skins_count)
         obj.select_set(True)
         context.view_layer.objects.active = obj
         if self.Frames and self.OSkins:
