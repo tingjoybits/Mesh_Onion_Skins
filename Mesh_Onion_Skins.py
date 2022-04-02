@@ -413,7 +413,7 @@ def update_tmarker(self, context):
         frame_nums = list(set(frame_nums))
     tmarkers = context.scene.timeline_markers
     for frame in frame_nums:
-        tmarkers.new("os", frame=frame)
+        tmarkers.new("os", frame=int(frame))
 
 
 def update_os_draw_technic(self, context):
@@ -2392,7 +2392,7 @@ class Onion_Skins:
             self.Frames = self.os_method_keyframe()
 
     def make_frame(self, Frame):
-        bpy.context.scene.frame_set(Frame)
+        bpy.context.scene.frame_set(int(Frame))
         print("Onion Skin: Frame " + str(Frame))
         if self.sc.os_draw_mode == 'MESH':
             count = make_onionSkin_frame(self, self.objp, self.empty, self.curframe, Frame)
@@ -2703,7 +2703,7 @@ class OS_OT_CreateUpdate_Skins(Operator):
         if self.sc.onionsk_tmarker and self.OSkins:
             for Frame in self.OSkins.Frames:
                 tmarkers = bpy.context.scene.timeline_markers
-                tmarkers.new("os", frame=Frame)
+                tmarkers.new("os", frame=int(Frame))
 
         bpy.data.objects.update()
         bpy.data.scenes.update()
@@ -3070,8 +3070,9 @@ def get_selected_os_set_childrens():
         return get_collection_objects(params.active_obj_users_collection)
     if sc.selection_sets == "PARENT":
         obj = checkout_parent(bpy.context.active_object)
-        if obj.proxy:
-            obj = obj.proxy
+        if hasattr(obj, "proxy"):
+            if obj.proxy:
+                obj = obj.proxy
         return [ob for ob in childrens_lookup(obj) if ob.type == 'MESH']
 
 
