@@ -1905,7 +1905,7 @@ class Progress_Status(object):
     @staticmethod
     def set_progress(self, context, value):
         if Progress_Status.widget_visible:
-            context.scene.Status_progress = value
+            context.scene.Status_progress = int(value)
 
     @staticmethod
     def get_progress(self, context):
