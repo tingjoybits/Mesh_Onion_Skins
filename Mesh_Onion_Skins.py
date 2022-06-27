@@ -1850,14 +1850,14 @@ def create_update_motion_path(context, mode, obj, fs, fe, kfbefore, kfafter):
     if mode == 'POSE':
         if mp.has_motion_paths is True:
             bpy.ops.pose.paths_clear(only_selected=False)
-        bpy.ops.object.paths_calculate(display_type="RANGE", range="KEYS_ALL")
+        bpy.ops.object.paths_calculate()
     elif mode == 'OBJECT':
         if mp.has_motion_paths is True:
             if sc.os_draw_mode == 'MESH':
                 bpy.ops.object.paths_clear(only_selected=False)
             else:
                 bpy.ops.object.paths_clear(only_selected=True)
-        bpy.ops.object.paths_calculate(display_type="RANGE", range="KEYS_ALL")
+        bpy.ops.object.paths_calculate()
     bpy.ops.object.mode_set(mode=mode)
 
 
