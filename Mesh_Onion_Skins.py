@@ -34,7 +34,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 1, 2),
+    'version': (1, 1, 3),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -1798,6 +1798,13 @@ def run_filter_active_bone(obj, fcurve):
     return skip
 
 
+def calculate_motion_path(mode, display_type):
+    if bpy.app.version < (3, 2, 0):
+        exec(f"bpy.ops.{mode}.paths_calculate()")
+    else:
+        exec(f"bpy.ops.{mode}.paths_calculate(display_type=display_type)")
+
+
 def create_update_motion_path(context, mode, obj, fs, fe, kfbefore, kfafter):
     sc = context.scene.onion_skins_scene_props
     curframe = context.scene.frame_current
@@ -1850,14 +1857,13 @@ def create_update_motion_path(context, mode, obj, fs, fe, kfbefore, kfafter):
     if mode == 'POSE':
         if mp.has_motion_paths is True:
             bpy.ops.pose.paths_clear(only_selected=False)
-        bpy.ops.pose.paths_calculate(start_frame=fs, end_frame=fe+1)
     elif mode == 'OBJECT':
         if mp.has_motion_paths is True:
             if sc.os_draw_mode == 'MESH':
                 bpy.ops.object.paths_clear(only_selected=False)
             else:
                 bpy.ops.object.paths_clear(only_selected=True)
-        bpy.ops.object.paths_calculate(start_frame=fs, end_frame=fe + 1)
+    calculate_motion_path(mode.lower(), mp.type)
     bpy.ops.object.mode_set(mode=mode)
 
 
