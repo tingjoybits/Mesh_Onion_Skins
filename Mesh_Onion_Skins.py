@@ -34,7 +34,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 1, 3),
+    'version': (1, 1, 4),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -1174,10 +1174,11 @@ def format_os_material(mat, color):
     mat.use_nodes = True
     nodes = get_material_BSDFs(mat)  # "Principled BSDF"
     for n in nodes:
-        mat.node_tree.nodes[n].inputs[0].default_value = mat.diffuse_color
-        mat.node_tree.nodes[n].inputs[5].default_value = 0
-        mat.node_tree.nodes[n].inputs[7].default_value = mat.roughness
-        mat.node_tree.nodes[n].inputs[18].default_value = 0.3
+        mat.node_tree.nodes[n].inputs.get('Base Color').default_value = mat.diffuse_color
+        mat.node_tree.nodes[n].inputs.get('Metallic').default_value = 0
+        mat.node_tree.nodes[n].inputs.get('Specular').default_value = 1
+        mat.node_tree.nodes[n].inputs.get('Roughness').default_value = mat.roughness
+        mat.node_tree.nodes[n].inputs.get('Alpha').default_value = 0.3
 
 
 def create_skins_materials():
@@ -1271,16 +1272,16 @@ def set_material_alpha(material, alpha):
     material.diffuse_color[3] = alpha
     nodes = get_material_BSDFs(material)
     for n in nodes:
-        material.node_tree.nodes[n].inputs[0].default_value[3] = alpha
-        material.node_tree.nodes[n].inputs[18].default_value = alpha
+        material.node_tree.nodes[n].inputs.get('Base Color').default_value[3] = alpha
+        material.node_tree.nodes[n].inputs.get('Alpha').default_value = alpha
 
 
 def set_material_color(material, color):
     material.diffuse_color = color
     nodes = get_material_BSDFs(material)
     for n in nodes:
-        material.node_tree.nodes[n].inputs[0].default_value = color
-        material.node_tree.nodes[n].inputs[18].default_value = color[3]
+        material.node_tree.nodes[n].inputs.get('Base Color').default_value = color
+        material.node_tree.nodes[n].inputs.get('Alpha').default_value = color[3]
 
 
 def get_prefix_material_color(skin_prefix):
@@ -1448,7 +1449,7 @@ def fade_onion_colors(sk_names, skin_prefix, mat_color, count, view_range=False)
                 continue
             alpha = get_fade_os_alpha(mat_color, alpha_step, multiply)
             mat.diffuse_color[3] = alpha
-            mat.node_tree.nodes["Principled BSDF"].inputs[18].default_value = alpha
+            mat.node_tree.nodes["Principled BSDF"].inputs.get('Alpha').default_value = alpha
             s.color[3] = s.color[3] - (alpha_step * multiply)
             if s.color[3] < sc.fade_to_value:
                 alpha = sc.fade_to_value
@@ -1456,7 +1457,7 @@ def fade_onion_colors(sk_names, skin_prefix, mat_color, count, view_range=False)
                     alpha = sc.color_alpha_value
                 s.color[3] = alpha
                 mat.diffuse_color[3] = alpha
-                mat.node_tree.nodes["Principled BSDF"].inputs[18].default_value = alpha
+                mat.node_tree.nodes["Principled BSDF"].inputs.get('Alpha').default_value = alpha
             if skin_prefix == 'before':
                 multiply = multiply - 1
             if skin_prefix == 'after':
