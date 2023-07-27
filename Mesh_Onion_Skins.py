@@ -4480,19 +4480,42 @@ def set_view_colors(s, s_type):
     s.color = m.diffuse_color
 
 
-def set_view_range_props(scene, s, view_range, s_type):
-    sc = bpy.context.scene.onion_skins_scene_props
+def is_in_view_range(scene, s, view_range, s_type):
     for i in range(1, view_range + 1):
         if s_type == 'before':
             frame = scene.frame_current - i
         if s_type == 'after':
             frame = scene.frame_current + i
         if s.name.endswith('_' + str(frame)):
-            if s.hide_viewport:
-                s.hide_viewport = False
+            return True
+    return False
+
+
+def unhide_skin_object(s):
+    sc = bpy.context.scene.onion_skins_scene_props
+    # s.hide_set(False)
+    if s.hide_viewport:
+        s.hide_viewport = False
+    if sc.show_in_render:
+        s.hide_render = False
+
+
+def set_view_range_props(scene, s, view_range, s_type):
+    global PRE_VIEW_FRAME
+    if PRE_VIEW_FRAME == scene.frame_current - 1:
+        if s_type == 'before':
+            frame = scene.frame_current - 1
+        if s_type == 'after':
+            frame = scene.frame_current + view_range
+        if s.name.endswith('_' + str(frame)):
+            unhide_skin_object(s)
             set_view_colors(s, s_type)
-            if sc.show_in_render:
-                s.hide_render = False
+            return True
+        return is_in_view_range(scene, s, view_range, s_type)
+    else:
+        if is_in_view_range(scene, s, view_range, s_type):
+            unhide_skin_object(s)
+            set_view_colors(s, s_type)
             return True
     return False
 
@@ -4513,8 +4536,19 @@ def get_view_range_keyframes(curframe, tree_skin, frames_count):
         return after
 
 
+PRE_VIEW_FRAME = None
+
+
+def hide_skin_object(s):
+    if not s.hide_viewport:
+        s.hide_viewport = True
+    if not s.hide_render:
+        s.hide_render = True
+
+
 def view_range_frames(scene):
     global CREATING
+    global PRE_VIEW_FRAME
     if CREATING:
         return None
     sc = bpy.context.scene.onion_skins_scene_props
@@ -4531,24 +4565,18 @@ def view_range_frames(scene):
     frames_count.sort()
     frames_count = dict(frames_count)
     for s in tree.children:
+        item_frame = int(float(s.name.split('_')[-1]))
         if sc.onionsk_method == 'KEYFRAME' and sc.view_range_frame_type == 'KEYFRAME':
-            item_frame = int(float(s.name.split('_')[-1]))
             if item_frame in get_view_range_keyframes(scene.frame_current, s, frames_count):
                 if item_frame < scene.frame_current and sc.hide_os_before:
                     set_view_colors(s, 'before')
                     sk_names_before.append(s.name)
-                    if s.hide_viewport:
-                        s.hide_viewport = False
-                    if sc.show_in_render:
-                        s.hide_render = False
+                    unhide_skin_object(s)
                     continue
                 if item_frame > scene.frame_current and sc.hide_os_after:
                     set_view_colors(s, 'after')
                     sk_names_after.append(s.name)
-                    if s.hide_viewport:
-                        s.hide_viewport = False
-                    if sc.show_in_render:
-                        s.hide_render = False
+                    unhide_skin_object(s)
                     continue
         else:
             if scene.frame_current - 1 >= scene.frame_current - sc.view_before and \
@@ -4561,10 +4589,10 @@ def view_range_frames(scene):
                 if set_view_range_props(scene, s, sc.view_after, 'after'):
                     sk_names_after.append(s.name)
                     continue
-        if not s.hide_viewport:
-            s.hide_viewport = True
-        if not s.hide_render:
-            s.hide_render = True
+        if item_frame < scene.frame_current - sc.view_before or \
+                item_frame > scene.frame_current + sc.view_after:
+            hide_skin_object(s)
+    PRE_VIEW_FRAME = scene.frame_current
     if not sc.fade_to_alpha:
         return None
     if sc.hide_os_before:
@@ -4572,6 +4600,7 @@ def view_range_frames(scene):
         fade_onion_colors(
             sk_names_before, 'before', mat_color, len(sk_names_before),
             view_range=True)
+        # print("FADE", len(sk_names_before))
     if sc.hide_os_after:
         mat_color = get_prefix_material_color('after')
         fade_onion_colors(
