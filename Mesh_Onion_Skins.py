@@ -34,7 +34,7 @@ from mathutils import Vector, Matrix
 bl_info = {
     'name': "Mesh Onion Skins",
     'author': "TingJoyBits",
-    'version': (1, 1, 4),
+    'version': (1, 1, 5),
     'blender': (2, 80, 0),
     'location': "View3D > Animation > Mesh Onion Skins",
     'description': "Mesh Onion Skins for Blender Animations",
@@ -58,7 +58,10 @@ Active_Object = None
 GPU_FRAMES = {}
 GPU_MARKERS = {}
 DRAW_TOGGLE = False
-SHADER = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+if bpy.app.version < (4, 0, 0):
+    SHADER = gpu.shader.from_builtin('3D_UNIFORM_COLOR')
+else:
+    SHADER = gpu.shader.from_builtin('UNIFORM_COLOR')
 Draw_Handler = None
 Draw_Timer = None
 
