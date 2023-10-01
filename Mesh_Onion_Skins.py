@@ -1177,11 +1177,17 @@ def format_os_material(mat, color):
     mat.use_nodes = True
     nodes = get_material_BSDFs(mat)  # "Principled BSDF"
     for n in nodes:
-        mat.node_tree.nodes[n].inputs.get('Base Color').default_value = mat.diffuse_color
-        mat.node_tree.nodes[n].inputs.get('Metallic').default_value = 0
-        mat.node_tree.nodes[n].inputs.get('Specular').default_value = 1
-        mat.node_tree.nodes[n].inputs.get('Roughness').default_value = mat.roughness
-        mat.node_tree.nodes[n].inputs.get('Alpha').default_value = 0.3
+        inputs = mat.node_tree.nodes[n].inputs
+        if inputs.get('Base Color'):
+            inputs.get('Base Color').default_value = mat.diffuse_color
+        if inputs.get('Metallic'):
+            inputs.get('Metallic').default_value = 0
+        if inputs.get('Specular'):
+            inputs.get('Specular').default_value = 1
+        if inputs.get('Roughness'):
+            inputs.get('Roughness').default_value = mat.roughness
+        if inputs.get('Alpha'):
+            inputs.get('Alpha').default_value = 0.3
 
 
 def create_skins_materials():
