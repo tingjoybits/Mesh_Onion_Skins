@@ -64,6 +64,4 @@ This update dedicated to 'Mesh' draw mode exclusively. Even if this mode is a sl
 
 # Support the Developer
 
-[![Donate](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=C77W5ZVC6R562)
-
 You can support me here https://gumroad.com/l/OqkKG, Thanks!
